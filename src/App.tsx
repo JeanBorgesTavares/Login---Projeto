@@ -9,6 +9,7 @@ import Index from '@/pages/Index'
 import SignUp from '@/pages/SignUp'
 import ForgotPassword from '@/pages/ForgotPassword'
 import Dashboard from '@/pages/Dashboard'
+import ConnectionTest from '@/pages/ConnectionTest'
 import NotFound from '@/pages/NotFound'
 
 const App = () => (
@@ -23,6 +24,7 @@ const App = () => (
             <Route path="/signup" element={<SignUp />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/connection-test" element={<ConnectionTest />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
