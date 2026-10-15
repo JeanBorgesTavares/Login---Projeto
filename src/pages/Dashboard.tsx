@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
-import { AlertTriangle, Clock, LogOut } from 'lucide-react'
+import { AlertTriangle, Clock, LogOut, User } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { AdminHome, CompanyHome, DriverHome, OperatorHome } from '@/pages/homes'
 import { supabase } from '@/lib/supabase/client'
