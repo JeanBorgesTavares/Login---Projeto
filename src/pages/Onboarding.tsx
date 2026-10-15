@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/use-auth'
 
 export default function Onboarding() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, refreshProfile } = useAuth()
   const [busy, setBusy] = useState<'company' | 'driver' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -27,6 +27,7 @@ export default function Onboarding() {
     if (insertError) {
       // 23505 = perfil já existe: segue o fluxo, o gate decide a tela.
       if (String(insertError.code) === '23505') {
+        await refreshProfile()
         navigate('/dashboard', { replace: true })
         return
       }
@@ -34,6 +35,8 @@ export default function Onboarding() {
       setBusy(null)
       return
     }
+    // Perfil criado: re-ler ANTES de navegar — o gate decide a tela certa.
+    await refreshProfile()
     navigate('/dashboard', { replace: true })
   }
 

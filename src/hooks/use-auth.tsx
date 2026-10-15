@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { User, Session, AuthError } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase/client'
 
@@ -22,6 +22,7 @@ interface AuthContextType {
   profile: Profile | null
   loading: boolean
   accessDenied: string | null
+  refreshProfile: () => Promise<void>
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>
   signUp: (
     email: string,
@@ -49,50 +50,58 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true)
   const [accessDenied, setAccessDenied] = useState<string | null>(null)
 
+  // F1-007: leitura do perfil reutilizável — o onboarding cria o perfil DEPOIS
+  // do primeiro login e precisa re-ler (o gate decide a tela pelo estado novo).
+  const loadProfile = useCallback(async (sess: Session | null) => {
+    if (!sess?.user) {
+      setProfile(null)
+      setLoading(false)
+      return
+    }
+
+    // Leitura do perfil: fonte de verdade do acesso.
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('user_id, role, status, full_name')
+      .eq('user_id', sess.user.id)
+      .maybeSingle()
+
+    if (error || !data) {
+      // Falha na leitura NÃO vira acesso: bloqueia a operação explicitamente.
+      setProfile(null)
+      setAccessDenied(
+        'Não foi possível verificar seu perfil de acesso. Por segurança, a operação fica bloqueada. Tente novamente em instantes.',
+      )
+      setLoading(false)
+      return
+    }
+
+    if (data.status === 'disabled') {
+      // Conta desativada: encerra a sessão e informa o motivo.
+      setProfile(null)
+      setAccessDenied(
+        'Sua conta foi desativada. Fale com a administração do sistema para reativar o acesso.',
+      )
+      setLoading(false)
+      await supabase.auth.signOut()
+      return
+    }
+
+    setAccessDenied(null)
+    setProfile(data as Profile)
+    setLoading(false)
+  }, [])
+
+  const refreshProfile = useCallback(async () => {
+    const {
+      data: { session: s },
+    } = await supabase.auth.getSession()
+    await loadProfile(s)
+  }, [loadProfile])
+
   useEffect(() => {
     let cancelled = false
-
-    const loadProfile = async (sess: Session | null) => {
-      if (!sess?.user) {
-        setProfile(null)
-        setLoading(false)
-        return
-      }
-
-      // Leitura do perfil: fonte de verdade do acesso.
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('user_id, role, status, full_name')
-        .eq('user_id', sess.user.id)
-        .maybeSingle()
-
-      if (cancelled) return
-
-      if (error || !data) {
-        // Falha na leitura NÃO vira acesso: bloqueia a operação explicitamente.
-        setProfile(null)
-        setAccessDenied(
-          'Não foi possível verificar seu perfil de acesso. Por segurança, a operação fica bloqueada. Tente novamente em instantes.',
-        )
-        setLoading(false)
-        return
-      }
-
-      if (data.status === 'disabled') {
-        // Conta desativada: encerra a sessão e informa o motivo.
-        setProfile(null)
-        setAccessDenied(
-          'Sua conta foi desativada. Fale com a administração do sistema para reativar o acesso.',
-        )
-        setLoading(false)
-        await supabase.auth.signOut()
-        return
-      }
-
-      setAccessDenied(null)
-      setProfile(data as Profile)
-      setLoading(false)
-    }
+    void cancelled
 
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s)
@@ -166,6 +175,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         profile,
         loading,
         accessDenied,
+        refreshProfile,
         signIn,
         signUp,
         signOut,
