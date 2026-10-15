@@ -58,6 +58,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false)
       return
     }
+    // F1-007: releitura em andamento — os gates (onboarding/dashboard) esperam
+    // o perfil carregar antes de decidir a tela (evita race pós-login).
+    setLoading(true)
 
     // Leitura do perfil: fonte de verdade do acesso.
     const { data, error } = await supabase
