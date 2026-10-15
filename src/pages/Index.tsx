@@ -7,7 +7,7 @@ import { toast } from '@/hooks/use-toast'
 export default function Index() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, signIn, resendSignUpEmail, loading: authLoading } = useAuth()
+  const { user, signIn, resendSignUpEmail, loading: authLoading, accessDenied } = useAuth()
 
   // Form inputs
   const [email, setEmail] = useState('')
@@ -182,6 +182,17 @@ export default function Index() {
             Gerencie abastecimentos, cadastros e frotas
           </p>
         </div>
+
+        {/* F1-003: motivo de acesso negado (conta desativada / perfil não verificado) */}
+        {accessDenied && !authErrorMessage && (
+          <div
+            role="alert"
+            className="mb-5 flex items-start gap-2.5 rounded-xl border border-[#EAB308]/40 bg-[#EAB308]/10 p-3.5 text-xs text-[#FACC15] animate-banner-slide-up"
+          >
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <span className="leading-relaxed">{accessDenied}</span>
+          </div>
+        )}
 
         {/* Optional Success Banner passed from secondary pages */}
         {stateSuccessMessage && !authErrorMessage && (

@@ -42,8 +42,9 @@ export default function SignUp() {
       setPasswordError('A senha é obrigatória.')
       return false
     }
-    if (val.length < 6) {
-      setPasswordError('A senha deve ter no mínimo 6 caracteres.')
+    // F1-003: senha mínima de 8 caracteres (endurecimento de Auth).
+    if (val.length < 8) {
+      setPasswordError('A senha deve ter no mínimo 8 caracteres.')
       return false
     }
     setPasswordError(null)
@@ -237,7 +238,7 @@ export default function SignUp() {
                   if (passwordError) validatePassword(e.target.value)
                 }}
                 onBlur={() => validatePassword(password)}
-                placeholder="Crie uma senha forte (mín. 6 dígitos)"
+                placeholder="Crie uma senha forte (mín. 8 caracteres)"
                 aria-invalid={Boolean(passwordError)}
                 aria-describedby={passwordError ? 'signup-password-error' : undefined}
                 className={`w-full h-12 rounded-xl bg-[#0A0A0A]/80 border pl-11 pr-12 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97] shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)] transition-all duration-200 focus:outline-none focus:ring-[3px] focus:ring-[#16A34A]/30 focus:border-[#16A34A] ${
