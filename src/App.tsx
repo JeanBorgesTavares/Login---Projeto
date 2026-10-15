@@ -1,5 +1,5 @@
 /* Main App Component - Handles routing (using react-router-dom), query client and other providers */
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -10,7 +10,21 @@ import SignUp from '@/pages/SignUp'
 import ForgotPassword from '@/pages/ForgotPassword'
 import Dashboard from '@/pages/Dashboard'
 import ConnectionTest from '@/pages/ConnectionTest'
+import Onboarding from '@/pages/Onboarding'
+import CompanyRequest from '@/pages/CompanyRequest'
 import NotFound from '@/pages/NotFound'
+
+// F1-007: guard da rota /company-request — exige sessão + perfil company/pending.
+const CompanyRequestGuard = ({ children }: { children: React.ReactNode }) => {
+  const { user, profile, loading } = useAuth()
+  if (loading) {
+    return null
+  }
+  if (!user || profile?.role !== 'company' || profile?.status !== 'pending') {
+    return <Navigate to="/" replace />
+  }
+  return <>{children}</>
+}
 
 const App = () => (
   <BrowserRouter>
@@ -25,6 +39,15 @@ const App = () => (
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/connection-test" element={<ConnectionTest />} />
+            <Route path="/onboarding" element={<Onboarding />} />
+            <Route
+              path="/company-request"
+              element={
+                <CompanyRequestGuard>
+                  <CompanyRequest />
+                </CompanyRequestGuard>
+              }
+            />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
