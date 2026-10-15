@@ -50,9 +50,23 @@ export default function ForgotPassword() {
 
       if (error) {
         triggerShake()
-        setAuthErrorMessage(
-          error.message || 'Não foi possível solicitar a recuperação. Tente novamente.',
-        )
+        const rawMsg = error.message.toLowerCase()
+        if (
+          rawMsg.includes('failed to fetch') ||
+          rawMsg.includes('networkerror') ||
+          rawMsg.includes('network request failed') ||
+          rawMsg.includes('fetch failed') ||
+          rawMsg.includes('timeout')
+        ) {
+          // F1-003: falha de rede nunca é mostrada crua (nem em inglês) ao usuário.
+          setAuthErrorMessage(
+            'Não foi possível conectar ao servidor. Verifique sua conexão com a internet e tente novamente em instantes.',
+          )
+        } else {
+          setAuthErrorMessage(
+            error.message || 'Não foi possível solicitar a recuperação. Tente novamente.',
+          )
+        }
       } else {
         setSuccessMessage(
           `Enviamos as instruções de recuperação para ${email.trim()}. Verifique sua caixa de entrada e spam.`,

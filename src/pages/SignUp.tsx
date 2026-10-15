@@ -90,7 +90,20 @@ export default function SignUp() {
       if (error) {
         triggerShake()
         const rawMsg = error.message.toLowerCase()
-        if (rawMsg.includes('user already registered') || rawMsg.includes('already exists')) {
+        if (
+          rawMsg.includes('failed to fetch') ||
+          rawMsg.includes('networkerror') ||
+          rawMsg.includes('network request failed') ||
+          rawMsg.includes('fetch failed') ||
+          rawMsg.includes('timeout')
+        ) {
+          setAuthErrorMessage(
+            'Não foi possível conectar ao servidor. Verifique sua conexão com a internet e tente novamente em instantes.',
+          )
+        } else if (
+          rawMsg.includes('user already registered') ||
+          rawMsg.includes('already exists')
+        ) {
           setAuthErrorMessage('Este e-mail já está cadastrado. Faça login ou recupere sua senha.')
         } else {
           setAuthErrorMessage(error.message || 'Erro ao criar conta. Tente novamente.')
