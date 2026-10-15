@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import { AlertTriangle, Clock, Fuel, LogOut, ShieldCheck, User } from 'lucide-react'
 import { useAuth, type UserRole } from '@/hooks/use-auth'
 
@@ -10,7 +11,15 @@ const roleLabel: Record<UserRole, string> = {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const { user, profile, loading, accessDenied, signOut } = useAuth()
+
+  // CA-F1-01-05: sem sessão não há acesso — volta para o login.
+  useEffect(() => {
+    if (!loading && !user && !accessDenied) {
+      navigate('/', { replace: true })
+    }
+  }, [loading, user, accessDenied, navigate])
 
   const handleLogout = async () => {
     await signOut()
