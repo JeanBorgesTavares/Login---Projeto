@@ -69,12 +69,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .eq('user_id', sess.user.id)
       .maybeSingle()
 
-    if (error || !data) {
+    if (error) {
       // Falha na leitura NÃO vira acesso: bloqueia a operação explicitamente.
       setProfile(null)
       setAccessDenied(
         'Não foi possível verificar seu perfil de acesso. Por segurança, a operação fica bloqueada. Tente novamente em instantes.',
       )
+      setLoading(false)
+      return
+    }
+
+    if (!data) {
+      // F1-007: usuário autenticado SEM perfil ainda não escolheu o papel —
+      // não é erro: o Dashboard encaminha ao onboarding (Empresa/Motorista).
+      setProfile(null)
+      setAccessDenied(null)
       setLoading(false)
       return
     }
