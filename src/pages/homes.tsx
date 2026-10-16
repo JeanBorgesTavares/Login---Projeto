@@ -747,6 +747,73 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
 }
 
 export function DriverHome({ email, onLogout }: { email: string | null; onLogout: () => void }) {
+  // F1-010: "Meus veículos" — lista vínculos ativos (RLS: só o próprio) e
+  // permite cadastrar/vincular veículo pela RPC (cria se não existir).
+  type MyVehicle = {
+    id: string
+    valid_from: string
+    vehicles: { plate_normalized: string; type: string } | null
+  }
+  const [myVehicles, setMyVehicles] = useState<MyVehicle[]>([])
+  const [vehiclesLoading, setVehiclesLoading] = useState(true)
+  const [plate, setPlate] = useState('')
+  const [vType, setVType] = useState<'truck' | 'car' | 'motorcycle'>('truck')
+  const [addBusy, setAddBusy] = useState(false)
+  const [addMsg, setAddMsg] = useState<string | null>(null)
+  const [addErr, setAddErr] = useState<string | null>(null)
+
+  const loadMyVehicles = async () => {
+    setVehiclesLoading(true)
+    const { data, error } = await supabase
+      .from('driver_vehicle_links')
+      .select('id, valid_from, vehicles(plate_normalized, type)')
+      .is('valid_to', null)
+      .order('valid_from', { ascending: false })
+    if (!error) {
+      setMyVehicles((data ?? []) as MyVehicle[])
+    }
+    setVehiclesLoading(false)
+  }
+
+  useEffect(() => {
+    loadMyVehicles()
+  }, [])
+
+  const handleAddVehicle = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAddBusy(true)
+    setAddMsg(null)
+    setAddErr(null)
+    // 1) Registra o veículo (idempotente por placa; cria se não existir).
+    const { error: regErr } = await supabase.rpc('register_vehicle', {
+      p_plate: plate,
+      p_type: vType,
+    })
+    if (regErr) {
+      setAddErr(regErr.message)
+      setAddBusy(false)
+      return
+    }
+    // 2) Vincula a si mesmo (idempotente; reativa vínculo encerrado).
+    const { error: linkErr } = await supabase.rpc('link_driver_vehicle', {
+      p_plate: plate,
+    })
+    setAddBusy(false)
+    if (linkErr) {
+      setAddErr(linkErr.message)
+      return
+    }
+    setPlate('')
+    setAddMsg('Veículo vinculado ao seu cadastro.')
+    await loadMyVehicles()
+  }
+
+  const typeLabel: Record<string, string> = {
+    truck: 'Caminhão',
+    car: 'Carro',
+    motorcycle: 'Moto',
+  }
+
   return (
     <HomeShell
       icon={<Truck className="w-8 h-8" />}
@@ -756,10 +823,110 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
       accent="amber"
       onLogout={onLogout}
     >
+      {/* --- F1-010: Meus veículos --- */}
+      <section aria-labelledby="my-vehicles-heading" className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Truck className="w-4 h-4 text-[#EAB308]" />
+            <h2 id="my-vehicles-heading" className="text-sm font-semibold text-[#F7F9F8]">
+              Meus veículos
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={loadMyVehicles}
+            className="text-[#8B9A97] hover:text-[#F7F9F8] transition-colors"
+            aria-label="Recarregar veículos"
+          >
+            <RefreshCw className={`w-4 h-4 ${vehiclesLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {vehiclesLoading && myVehicles.length === 0 ? (
+          <p role="status" className="text-xs text-[#8B9A97] py-4 text-center">
+            Carregando veículos...
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {myVehicles.map((mv) => (
+              <li
+                key={mv.id}
+                className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between gap-3"
+              >
+                <p className="text-sm text-[#F7F9F8] font-mono truncate">
+                  {mv.vehicles?.plate_normalized ?? '—'}
+                </p>
+                <p className="text-[11px] text-[#8B9A97] shrink-0">
+                  {typeLabel[mv.vehicles?.type ?? 'truck']}
+                </p>
+              </li>
+            ))}
+            {myVehicles.length === 0 && (
+              <li className="text-xs text-[#8B9A97] py-4 text-center">
+                Nenhum veículo vinculado ainda.
+              </li>
+            )}
+          </ul>
+        )}
+
+        <form onSubmit={handleAddVehicle} className="mt-4 space-y-3">
+          <div>
+            <label htmlFor="veh-plate" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+              Placa do veículo <span className="text-[#DC2626]">*</span>
+            </label>
+            <input
+              id="veh-plate"
+              value={plate}
+              onChange={(e) => setPlate(e.target.value)}
+              placeholder="ABC1D23"
+              autoComplete="off"
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#EAB308]/40"
+            />
+          </div>
+          <div>
+            <label htmlFor="veh-type" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+              Tipo
+            </label>
+            <select
+              id="veh-type"
+              value={vType}
+              onChange={(e) => setVType(e.target.value as 'truck' | 'car' | 'motorcycle')}
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#EAB308]/40"
+            >
+              <option value="truck">Caminhão</option>
+              <option value="car">Carro</option>
+              <option value="motorcycle">Moto</option>
+            </select>
+          </div>
+          <button
+            type="submit"
+            disabled={addBusy}
+            className="w-full h-11 rounded-xl bg-[#EAB308]/10 hover:bg-[#EAB308]/20 border border-[#EAB308]/30 text-[#EAB308] font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EAB308]"
+          >
+            {addBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            {addBusy ? 'Vinculando...' : 'Vincular veículo'}
+          </button>
+        </form>
+        {addMsg && (
+          <p role="status" className="mt-3 text-xs text-[#16A34A] flex items-center gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5" /> {addMsg}
+          </p>
+        )}
+        {addErr && (
+          <p role="alert" className="mt-3 text-xs text-[#DC2626] flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5" /> {addErr}
+          </p>
+        )}
+        <p className="mt-3 text-[11px] text-[#8B9A97] leading-relaxed">
+          Placa já cadastrada é reaproveitada — nunca duplicada. Vínculo encerrado é reativado com o
+          histórico preservado.
+        </p>
+      </section>
+
       <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
         <p className="text-xs text-[#8B9A97] leading-relaxed">
           Isolamento ativo: previsões e histórico chegam nas próximas fases; hoje você confirma o
-          acesso e o perfil correto de motorista.
+          acesso, o perfil correto de motorista e seus veículos.
         </p>
       </div>
     </HomeShell>
