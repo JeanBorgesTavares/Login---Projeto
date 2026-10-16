@@ -23,6 +23,7 @@ import {
   Users,
   XCircle,
   X,
+  Link2,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth, type UserRole } from '@/hooks/use-auth'
@@ -170,6 +171,82 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
   const [driversLoading, setDriversLoading] = useState(true)
   const [driverBusy, setDriverBusy] = useState<string | null>(null)
 
+  // F1-010: fila de vínculos empresa↔motorista/veículo pendentes (revisão interna).
+  type PendingLink = {
+    id: string
+    kind: 'driver' | 'vehicle'
+    company: { name: string } | null
+    driver_name: string | null
+    plate: string | null
+  }
+  const [pendingLinks, setPendingLinks] = useState<PendingLink[]>([])
+  const [linksLoading, setLinksLoading] = useState(true)
+  const [linkBusy, setLinkBusy] = useState<string | null>(null)
+  const [linkError, setLinkError] = useState<string | null>(null)
+
+  const loadPendingLinks = async () => {
+    setLinksLoading(true)
+    setLinkError(null)
+    const [dRes, vRes] = await Promise.all([
+      supabase
+        .from('company_driver_links')
+        .select('id, companies(name), drivers(full_name)')
+        .eq('status', 'pending'),
+      supabase
+        .from('company_vehicle_links')
+        .select('id, companies(name), vehicles(plate_normalized)')
+        .eq('status', 'pending'),
+    ])
+    if (dRes.error || vRes.error) {
+      setLinkError('Não foi possível carregar a fila de vínculos. Tente novamente.')
+      setLinksLoading(false)
+      return
+    }
+    const dRows = (
+      (dRes.data ?? []) as Array<{
+        id: string
+        companies: { name: string } | null
+        drivers: { full_name: string } | null
+      }>
+    ).map((r) => ({
+      id: r.id,
+      kind: 'driver' as const,
+      company: r.companies,
+      driver_name: r.drivers?.full_name ?? null,
+      plate: null,
+    }))
+    const vRows = (
+      (vRes.data ?? []) as Array<{
+        id: string
+        companies: { name: string } | null
+        vehicles: { plate_normalized: string } | null
+      }>
+    ).map((r) => ({
+      id: r.id,
+      kind: 'vehicle' as const,
+      company: r.companies,
+      driver_name: null,
+      plate: r.vehicles?.plate_normalized ?? null,
+    }))
+    setPendingLinks([...dRows, ...vRows])
+    setLinksLoading(false)
+  }
+
+  const handleReviewLink = async (l: PendingLink, decision: 'active' | 'disabled') => {
+    setLinkBusy(l.id)
+    setLinkError(null)
+    const { error } = await supabase.rpc('review_link', {
+      p_link_id: l.id,
+      p_decision: decision,
+    })
+    setLinkBusy(null)
+    if (error) {
+      setLinkError(error.message)
+      return
+    }
+    await loadPendingLinks()
+  }
+
   const loadPendingDrivers = async () => {
     setDriversLoading(true)
     const { data, error } = await supabase
@@ -258,6 +335,7 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
     loadList()
     loadPendingCompanies()
     loadPendingDrivers()
+    loadPendingLinks()
   }, [])
 
   const callAdminFunction = async (body: Record<string, unknown>) => {
@@ -519,6 +597,91 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
             {pendingDrivers.length === 0 && (
               <li className="text-xs text-[#8B9A97] py-4 text-center">
                 Nenhum motorista aguardando ativação.
+              </li>
+            )}
+          </ul>
+        )}
+      </section>
+
+      {/* --- F1-010: Vínculos aguardando revisão --- */}
+      <section aria-labelledby="links-heading" className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Link2 className="w-4 h-4 text-[#16A34A]" />
+            <h2 id="links-heading" className="text-sm font-semibold text-[#F7F9F8]">
+              Vínculos aguardando revisão
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={loadPendingLinks}
+            className="text-[#8B9A97] hover:text-[#F7F9F8] transition-colors"
+            aria-label="Recarregar vínculos"
+          >
+            <RefreshCw className={`w-4 h-4 ${linksLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {linkError && (
+          <div
+            role="alert"
+            className="mb-2 p-3 rounded-xl border border-[#DC2626]/30 bg-[#DC2626]/5"
+          >
+            <p className="text-xs text-[#DC2626]">{linkError}</p>
+          </div>
+        )}
+
+        {linksLoading && pendingLinks.length === 0 ? (
+          <p role="status" className="text-xs text-[#8B9A97] py-4 text-center">
+            Carregando vínculos...
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {pendingLinks.map((l) => (
+              <li
+                key={l.id}
+                className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm text-[#F7F9F8] truncate">
+                    {l.company?.name ?? 'Empresa'} ·{' '}
+                    {l.kind === 'driver'
+                      ? (l.driver_name ?? 'motorista')
+                      : `veículo ${l.plate ?? '—'}`}
+                  </p>
+                  <p className="text-[11px] text-[#8B9A97]">
+                    {l.kind === 'driver'
+                      ? 'Vínculo empresa × motorista'
+                      : 'Vínculo empresa × veículo'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleReviewLink(l, 'active')}
+                    disabled={linkBusy === l.id}
+                    className="h-9 px-3 rounded-lg bg-[#16A34A]/10 hover:bg-[#16A34A]/20 border border-[#16A34A]/30 text-[#16A34A] text-xs font-semibold transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A]"
+                  >
+                    {linkBusy === l.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      'Aprovar'
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleReviewLink(l, 'disabled')}
+                    disabled={linkBusy === l.id}
+                    className="h-9 px-3 rounded-lg bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] text-xs font-semibold transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DC2626]"
+                  >
+                    Recusar
+                  </button>
+                </div>
+              </li>
+            ))}
+            {pendingLinks.length === 0 && (
+              <li className="text-xs text-[#8B9A97] py-4 text-center">
+                Nenhum vínculo aguardando revisão.
               </li>
             )}
           </ul>
