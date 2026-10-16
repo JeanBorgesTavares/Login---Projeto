@@ -22,7 +22,9 @@ import {
   UserRound,
   Users,
   XCircle,
+  X,
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase/client'
 import { useAuth, type UserRole } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase/client'
 
@@ -143,6 +145,58 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
   const [inviteErr, setInviteErr] = useState<string | null>(null)
   const [actionBusy, setActionBusy] = useState<string | null>(null)
 
+  // F1-008: fila de aprovação de empresas (empresas pending via RLS).
+  type PendingCompany = {
+    id: string
+    name: string
+    cnpj_normalized: string | null
+    contact_name: string | null
+  }
+  const [pendingCompanies, setPendingCompanies] = useState<PendingCompany[]>([])
+  const [approvalLoading, setApprovalLoading] = useState(true)
+  const [approvalError, setApprovalError] = useState<string | null>(null)
+  const [reviewBusy, setReviewBusy] = useState<string | null>(null)
+  const [rejecting, setRejecting] = useState<PendingCompany | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+
+  const loadPendingCompanies = async () => {
+    setApprovalLoading(true)
+    setApprovalError(null)
+    const { data, error } = await supabase
+      .from('companies')
+      .select('id, name, cnpj_normalized, contact_name')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true })
+    if (error) {
+      setApprovalError('Não foi possível carregar a fila de aprovação. Tente novamente.')
+    } else {
+      setPendingCompanies((data ?? []) as PendingCompany[])
+    }
+    setApprovalLoading(false)
+  }
+
+  const handleReview = async (
+    pc: PendingCompany,
+    decision: 'approve' | 'reject',
+    reason?: string,
+  ) => {
+    setReviewBusy(pc.id)
+    const { data, error } = await supabase.rpc('review_company', {
+      p_company_id: pc.id,
+      p_decision: decision,
+      p_reason: reason ?? null,
+    })
+    setReviewBusy(null)
+    if (error) {
+      setInviteErr(error.message)
+      return
+    }
+    setInviteErr(null)
+    setRejecting(null)
+    setRejectReason('')
+    await loadPendingCompanies()
+  }
+
   const loadList = async () => {
     setListLoading(true)
     setListError(null)
@@ -162,6 +216,7 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
 
   useEffect(() => {
     loadList()
+    loadPendingCompanies()
   }, [])
 
   const callAdminFunction = async (body: Record<string, unknown>) => {
@@ -288,6 +343,78 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
         </p>
       </section>
 
+      {/* --- F1-008: Fila de aprovação de empresas --- */}
+      <section aria-labelledby="approval-heading" className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-[#16A34A]" />
+            <h2 id="approval-heading" className="text-sm font-semibold text-[#F7F9F8]">
+              Empresas aguardando aprovação
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={loadPendingCompanies}
+            className="text-[#8B9A97] hover:text-[#F7F9F8] transition-colors"
+            aria-label="Recarregar fila de aprovação"
+          >
+            <RefreshCw className={`w-4 h-4 ${approvalLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {approvalLoading && pendingCompanies.length === 0 ? (
+          <p role="status" className="text-xs text-[#8B9A97] py-4 text-center">
+            Carregando pedidos...
+          </p>
+        ) : approvalError ? (
+          <div role="alert" className="p-3 rounded-xl border border-[#DC2626]/30 bg-[#DC2626]/5">
+            <p className="text-xs text-[#DC2626]">{approvalError}</p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {pendingCompanies.map((pc) => (
+              <li key={pc.id} className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm text-[#F7F9F8] truncate">{pc.name}</p>
+                    <p className="text-[11px] text-[#8B9A97] mt-0.5 font-mono">
+                      CNPJ {pc.cnpj_normalized || '—'} · {pc.contact_name || 'sem contato'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleReview(pc, 'approve')}
+                      disabled={reviewBusy === pc.id}
+                      className="h-9 px-3 rounded-lg bg-[#16A34A]/10 hover:bg-[#16A34A]/20 border border-[#16A34A]/30 text-[#16A34A] text-xs font-semibold transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A]"
+                    >
+                      {reviewBusy === pc.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        'Aprovar'
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRejecting(pc)}
+                      disabled={reviewBusy === pc.id}
+                      className="h-9 px-3 rounded-lg bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] text-xs font-semibold transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DC2626]"
+                    >
+                      Rejeitar
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+            {pendingCompanies.length === 0 && (
+              <li className="text-xs text-[#8B9A97] py-4 text-center">
+                Nenhuma empresa aguardando aprovação.
+              </li>
+            )}
+          </ul>
+        )}
+      </section>
+
       {/* --- Lista de internos --- */}
       <section aria-labelledby="internals-heading">
         <div className="flex items-center justify-between mb-3">
@@ -386,6 +513,74 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
           </ul>
         )}
       </section>
+
+      {/* --- F1-008: modal de rejeição com motivo obrigatório --- */}
+      {rejecting && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Rejeitar ${rejecting.name}`}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+        >
+          <div className="w-full max-w-[420px] rounded-2xl border border-white/[0.08] bg-[#0A0A0A] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-card-fade-in">
+            <div className="flex items-start justify-between gap-2 mb-4">
+              <h3 className="text-base font-bold text-[#F7F9F8]">Rejeitar cadastro</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setRejecting(null)
+                  setRejectReason('')
+                }}
+                aria-label="Fechar"
+                className="text-[#8B9A97] hover:text-[#F7F9F8]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-sm text-[#8B9A97] mb-1">
+              <span className="text-[#F7F9F8] font-medium">{rejecting.name}</span>
+            </p>
+            <p className="text-xs text-[#8B9A97] mb-4">
+              O motivo fica registrado na auditoria e a empresa pode corrigir e solicitar de novo.
+            </p>
+            <label
+              htmlFor="reject-reason"
+              className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+            >
+              Motivo da rejeição <span className="text-[#DC2626]">*</span>
+            </label>
+            <textarea
+              id="reject-reason"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+              placeholder="Ex.: CNPJ não confere com o contato informado"
+              className="w-full rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 py-3 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#DC2626]/40"
+            />
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                disabled={rejectReason.trim().length < 3 || reviewBusy === rejecting.id}
+                onClick={() => handleReview(rejecting, 'reject', rejectReason.trim())}
+                className="flex-1 h-11 rounded-xl bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] font-semibold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {reviewBusy === rejecting.id ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Confirmar rejeição
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRejecting(null)
+                  setRejectReason('')
+                }}
+                className="h-11 px-4 rounded-xl border border-white/[0.08] text-[#8B9A97] hover:text-[#F7F9F8] text-sm font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </HomeShell>
   )
 }
