@@ -232,7 +232,7 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
     setLinksLoading(false)
   }
 
-  const handleReviewLink = async (l: PendingLink, decision: 'active' | 'disabled') => {
+  const handleReviewLink = async (l: PendingLink, decision: 'approve' | 'refuse') => {
     setLinkBusy(l.id)
     setLinkError(null)
     const { error } = await supabase.rpc('review_link', {
@@ -658,7 +658,7 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    onClick={() => handleReviewLink(l, 'active')}
+                    onClick={() => handleReviewLink(l, 'approve')}
                     disabled={linkBusy === l.id}
                     className="h-9 px-3 rounded-lg bg-[#16A34A]/10 hover:bg-[#16A34A]/20 border border-[#16A34A]/30 text-[#16A34A] text-xs font-semibold transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A]"
                   >
@@ -670,7 +670,7 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleReviewLink(l, 'disabled')}
+                    onClick={() => handleReviewLink(l, 'refuse')}
                     disabled={linkBusy === l.id}
                     className="h-9 px-3 rounded-lg bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] text-xs font-semibold transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DC2626]"
                   >
