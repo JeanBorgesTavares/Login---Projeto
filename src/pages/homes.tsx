@@ -157,6 +157,7 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
   const [reviewBusy, setReviewBusy] = useState<string | null>(null)
   const [rejecting, setRejecting] = useState<PendingCompany | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [reviewError, setReviewError] = useState<string | null>(null)
 
   const loadPendingCompanies = async () => {
     setApprovalLoading(true)
@@ -180,6 +181,7 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
     reason?: string,
   ) => {
     setReviewBusy(pc.id)
+    setReviewError(null)
     const { data, error } = await supabase.rpc('review_company', {
       p_company_id: pc.id,
       p_decision: decision,
@@ -187,10 +189,11 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
     })
     setReviewBusy(null)
     if (error) {
-      setInviteErr(error.message)
+      // Erro da revisão aparece NO CONTEXTO da ação (modal/fila), não no convite.
+      setReviewError(error.message)
       return
     }
-    setInviteErr(null)
+    void data
     setRejecting(null)
     setRejectReason('')
     await loadPendingCompanies()
@@ -556,6 +559,11 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
               placeholder="Ex.: CNPJ não confere com o contato informado"
               className="w-full rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 py-3 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#DC2626]/40"
             />
+            {reviewError && (
+              <p role="alert" className="mt-3 text-xs text-[#DC2626] flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {reviewError}
+              </p>
+            )}
             <div className="mt-4 flex gap-3">
               <button
                 type="button"
