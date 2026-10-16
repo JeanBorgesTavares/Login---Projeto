@@ -26,7 +26,6 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth, type UserRole } from '@/hooks/use-auth'
-import { supabase } from '@/lib/supabase/client'
 
 const roleLabel: Record<UserRole, string> = {
   admin: 'Administrador',
