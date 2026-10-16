@@ -159,6 +159,44 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
   const [rejectReason, setRejectReason] = useState('')
   const [reviewError, setReviewError] = useState<string | null>(null)
 
+  // F1-009: fila de motoristas pendentes (ativação por interno).
+  type PendingDriver = {
+    user_id: string
+    full_name: string
+    cpf_normalized: string
+    phone: string | null
+  }
+  const [pendingDrivers, setPendingDrivers] = useState<PendingDriver[]>([])
+  const [driversLoading, setDriversLoading] = useState(true)
+  const [driverBusy, setDriverBusy] = useState<string | null>(null)
+
+  const loadPendingDrivers = async () => {
+    setDriversLoading(true)
+    const { data, error } = await supabase
+      .from('drivers')
+      .select('user_id, full_name, cpf_normalized, phone')
+      .eq('company_link_status', 'pending')
+      .order('created_at', { ascending: true })
+    if (!error) {
+      setPendingDrivers((data ?? []) as PendingDriver[])
+    }
+    setDriversLoading(false)
+  }
+
+  const handleDriverStatus = async (d: PendingDriver, status: 'active' | 'disabled') => {
+    setDriverBusy(d.user_id)
+    const { error } = await supabase.rpc('set_driver_status', {
+      p_driver_user_id: d.user_id,
+      p_status: status,
+    })
+    setDriverBusy(null)
+    if (error) {
+      setReviewError(error.message)
+      return
+    }
+    await loadPendingDrivers()
+  }
+
   const loadPendingCompanies = async () => {
     setApprovalLoading(true)
     setApprovalError(null)
@@ -219,6 +257,7 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
   useEffect(() => {
     loadList()
     loadPendingCompanies()
+    loadPendingDrivers()
   }, [])
 
   const callAdminFunction = async (body: Record<string, unknown>) => {
@@ -411,6 +450,75 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
             {pendingCompanies.length === 0 && (
               <li className="text-xs text-[#8B9A97] py-4 text-center">
                 Nenhuma empresa aguardando aprovação.
+              </li>
+            )}
+          </ul>
+        )}
+      </section>
+
+      {/* --- F1-009: Motoristas aguardando ativação --- */}
+      <section aria-labelledby="drivers-heading" className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Truck className="w-4 h-4 text-[#16A34A]" />
+            <h2 id="drivers-heading" className="text-sm font-semibold text-[#F7F9F8]">
+              Motoristas aguardando ativação
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={loadPendingDrivers}
+            className="text-[#8B9A97] hover:text-[#F7F9F8] transition-colors"
+            aria-label="Recarregar motoristas"
+          >
+            <RefreshCw className={`w-4 h-4 ${driversLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {driversLoading && pendingDrivers.length === 0 ? (
+          <p role="status" className="text-xs text-[#8B9A97] py-4 text-center">
+            Carregando motoristas...
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {pendingDrivers.map((d) => (
+              <li
+                key={d.user_id}
+                className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm text-[#F7F9F8] truncate">{d.full_name}</p>
+                  <p className="text-[11px] text-[#8B9A97] font-mono">
+                    CPF {d.cpf_normalized} · {d.phone || 'sem telefone'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleDriverStatus(d, 'active')}
+                    disabled={driverBusy === d.user_id}
+                    className="h-9 px-3 rounded-lg bg-[#16A34A]/10 hover:bg-[#16A34A]/20 border border-[#16A34A]/30 text-[#16A34A] text-xs font-semibold transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A]"
+                  >
+                    {driverBusy === d.user_id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      'Ativar'
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDriverStatus(d, 'disabled')}
+                    disabled={driverBusy === d.user_id}
+                    className="h-9 px-3 rounded-lg bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] text-xs font-semibold transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DC2626]"
+                  >
+                    Recusar
+                  </button>
+                </div>
+              </li>
+            ))}
+            {pendingDrivers.length === 0 && (
+              <li className="text-xs text-[#8B9A97] py-4 text-center">
+                Nenhum motorista aguardando ativação.
               </li>
             )}
           </ul>

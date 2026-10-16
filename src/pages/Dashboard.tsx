@@ -80,6 +80,7 @@ export default function Dashboard() {
     return (
       <>
         <CompanyPendingRouter />
+        <DriverPendingRouter />{' '}
         <div className="w-full flex justify-center">
           <div className="w-full max-w-[480px] rounded-2xl border border-white/[0.08] bg-[#0A0A0A]/80 p-6 sm:p-8 backdrop-blur-xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-card-fade-in text-center">
             <div className="mx-auto w-16 h-16 rounded-2xl bg-[#EAB308]/10 border border-[#EAB308]/30 flex items-center justify-center text-[#EAB308] mb-4">
@@ -148,7 +149,6 @@ export function CompanyPendingRouter() {
   useEffect(() => {
     if (loading || !user || !profile) return
     if (profile.role !== 'company' || profile.status !== 'pending') {
-      navigate('/dashboard', { replace: true })
       return
     }
     let cancelled = false
@@ -163,6 +163,38 @@ export function CompanyPendingRouter() {
         // Com vínculo pending: pedido enviado — aguarda aprovação (F1-008).
         if (!data) {
           navigate('/company-request', { replace: true })
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [loading, user, profile, navigate])
+
+  return null
+}
+
+// F1-009: driver pendente SEM cadastro em drivers é direcionado ao formulário
+// de autoinscrição (mesmo padrão da empresa).
+export function DriverPendingRouter() {
+  const navigate = useNavigate()
+  const { user, profile, loading } = useAuth()
+
+  useEffect(() => {
+    if (loading || !user || !profile) return
+    if (profile.role !== 'driver' || profile.status !== 'pending') {
+      return
+    }
+    let cancelled = false
+    supabase
+      .from('drivers')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return
+        // Sem cadastro: formulário (F1-009). Com cadastro: aguarda ativação.
+        if (!data) {
+          navigate('/driver-request', { replace: true })
         }
       })
     return () => {
