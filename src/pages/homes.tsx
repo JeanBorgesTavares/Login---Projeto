@@ -150,6 +150,7 @@ function InternalAgenda() {
     starts_at: string
     ends_at: string
     source: string
+    version: number
     drivers: { full_name: string } | null
     vehicles: { plate_normalized: string } | null
   }
@@ -199,7 +200,7 @@ function InternalAgenda() {
     const { data, error: err } = await supabase
       .from('arrival_requests')
       .select(
-        'id, kind, status, starts_at, ends_at, source, drivers(full_name), vehicles(plate_normalized)',
+        'id, kind, status, starts_at, ends_at, source, version, drivers(full_name), vehicles(plate_normalized)',
       )
       .order('starts_at', { ascending: true })
     if (err) {
@@ -255,6 +256,7 @@ function InternalAgenda() {
       p_request_id: r.id,
       p_decision: decision,
       p_reason: reason ?? null,
+      p_version: r.version,
     })
     setBusy(null)
     if (err) {
@@ -262,6 +264,10 @@ function InternalAgenda() {
         setRejectError(err.message)
       } else {
         setError(err.message)
+      }
+      // S306: conflito de versão — recarrega a agenda para mostrar o estado real.
+      if (err.message.toLowerCase().includes('conflito')) {
+        await load()
       }
       return
     }
@@ -1737,6 +1743,7 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
     starts_at: string
     ends_at: string
     notes: string | null
+    version: number
     vehicles: { plate_normalized: string } | null
   }
   const [myRequests, setMyRequests] = useState<MyRequest[]>([])
@@ -1755,7 +1762,7 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
     setReqLoading(true)
     const { data, error } = await supabase
       .from('arrival_requests')
-      .select('id, kind, status, starts_at, ends_at, notes, vehicles(plate_normalized)')
+      .select('id, kind, status, starts_at, ends_at, notes, version, vehicles(plate_normalized)')
       .order('starts_at', { ascending: true })
     if (!error) {
       setMyRequests((data ?? []) as MyRequest[])
@@ -1795,10 +1802,15 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
     const { error } = await supabase.rpc('change_arrival_request', {
       p_request_id: r.id,
       p_cancel: true,
+      p_version: r.version,
     })
     setCancelBusy(null)
     if (error) {
       setReqErr(error.message)
+      // S306: conflito de versão — recarrega para mostrar o estado real.
+      if (error.message.toLowerCase().includes('conflito')) {
+        await loadMyRequests()
+      }
       return
     }
     await loadMyRequests()
