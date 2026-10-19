@@ -216,9 +216,7 @@ function InternalAgenda() {
       .select('user_id, full_name')
       .order('full_name', { ascending: true })
     if (data) {
-      setDrivers(
-        (data as Array<{ user_id: string; full_name: string }>).filter((d) => d.full_name),
-      )
+      setDrivers((data as Array<{ user_id: string; full_name: string }>).filter((d) => d.full_name))
     }
   }
 
@@ -226,20 +224,30 @@ function InternalAgenda() {
     setCVehicle('')
     setCVehicles([])
     if (!driverUserId) return
-    const { data } = await supabase.from('drivers').select('id').eq('user_id', driverUserId).maybeSingle()
+    const { data } = await supabase
+      .from('drivers')
+      .select('id')
+      .eq('user_id', driverUserId)
+      .maybeSingle()
     if (!data) return
     const { data: links } = await supabase
       .from('driver_vehicle_links')
       .select('vehicles(id, plate_normalized)')
       .eq('driver_id', data.id)
       .is('valid_to', null)
-    const list = ((links ?? []) as Array<{ vehicles: { id: string; plate_normalized: string } | null }>)
+    const list = (
+      (links ?? []) as Array<{ vehicles: { id: string; plate_normalized: string } | null }>
+    )
       .filter((l) => l.vehicles)
       .map((l) => ({ id: l.vehicles!.id, plate: l.vehicles!.plate_normalized }))
     setCVehicles(list)
   }
 
-  const handleDecision = async (r: AgendaRow, decision: 'confirm' | 'refuse' | 'no_show', reason?: string) => {
+  const handleDecision = async (
+    r: AgendaRow,
+    decision: 'confirm' | 'refuse' | 'no_show',
+    reason?: string,
+  ) => {
     setBusy(r.id)
     setRejectError(null)
     setError(null)
@@ -311,7 +319,7 @@ function InternalAgenda() {
           aria-label="Recarregar agenda"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </div>
+        </button>
       </div>
 
       {error && (
@@ -355,7 +363,11 @@ function InternalAgenda() {
                           disabled={busy === r.id}
                           className="h-8 px-2.5 rounded-lg bg-[#16A34A]/10 hover:bg-[#16A34A]/20 border border-[#16A34A]/30 text-[#16A34A] text-[11px] font-semibold transition-all disabled:opacity-50"
                         >
-                          {busy === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirmar'}
+                          {busy === r.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            'Confirmar'
+                          )}
                         </button>
                         <button
                           type="button"
@@ -394,7 +406,10 @@ function InternalAgenda() {
 
       <form onSubmit={handleCreate} className="mt-4 space-y-3">
         <div>
-          <label htmlFor="agenda-driver" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+          <label
+            htmlFor="agenda-driver"
+            className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+          >
             Motorista <span className="text-[#DC2626]">*</span>
           </label>
           <select
@@ -416,7 +431,10 @@ function InternalAgenda() {
           </select>
         </div>
         <div>
-          <label htmlFor="agenda-vehicle" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+          <label
+            htmlFor="agenda-vehicle"
+            className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+          >
             Veículo do motorista <span className="text-[#DC2626]">*</span>
           </label>
           <select
@@ -451,7 +469,10 @@ function InternalAgenda() {
         </div>
         <div className="grid grid-cols-3 gap-2">
           <div className="col-span-3">
-            <label htmlFor="agenda-date" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+            <label
+              htmlFor="agenda-date"
+              className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+            >
               Data <span className="text-[#DC2626]">*</span>
             </label>
             <input
@@ -464,7 +485,10 @@ function InternalAgenda() {
             />
           </div>
           <div>
-            <label htmlFor="agenda-start" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+            <label
+              htmlFor="agenda-start"
+              className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+            >
               Início <span className="text-[#DC2626]">*</span>
             </label>
             <input
@@ -543,7 +567,10 @@ function InternalAgenda() {
               </span>{' '}
               · <span className="font-mono">{rejecting.vehicles?.plate_normalized ?? '—'}</span>
             </p>
-            <label htmlFor="agenda-reject-reason" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+            <label
+              htmlFor="agenda-reject-reason"
+              className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+            >
               Motivo da recusa <span className="text-[#DC2626]">*</span>
             </label>
             <textarea
