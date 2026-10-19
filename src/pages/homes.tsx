@@ -1863,7 +1863,7 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
     setVehiclesLoading(true)
     const { data, error } = await supabase
       .from('driver_vehicle_links')
-      .select('id, valid_from, vehicles(plate_normalized, type)')
+      .select('id, valid_from, vehicles(id, plate_normalized, type)')
       .is('valid_to', null)
       .order('valid_from', { ascending: false })
     if (!error) {
