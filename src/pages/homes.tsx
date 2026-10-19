@@ -1017,7 +1017,6 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
   }
 
   const loadMyVehicles = async () => {
->>>>>>>
     setVehiclesLoading(true)
     const { data, error } = await supabase
       .from('driver_vehicle_links')
@@ -1221,7 +1220,9 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
                           · {r.kind === 'parking' ? 'Estacionamento' : 'Triagem'}
                         </span>
                       </p>
-                      <p className="text-[11px] text-[#8B9A97] mt-0.5">{fmtWindow(r.starts_at)} → {fmtWindow(r.ends_at)}</p>
+                      <p className="text-[11px] text-[#8B9A97] mt-0.5">
+                        {fmtWindow(r.starts_at)} → {fmtWindow(r.ends_at)}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={`text-[11px] font-semibold ${meta.cls}`}>{meta.label}</span>
@@ -1232,7 +1233,11 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
                           disabled={cancelBusy === r.id}
                           className="h-8 px-2.5 rounded-lg bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] text-[11px] font-semibold transition-all disabled:opacity-50"
                         >
-                          {cancelBusy === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Cancelar'}
+                          {cancelBusy === r.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            'Cancelar'
+                          )}
                         </button>
                       )}
                     </div>
@@ -1241,16 +1246,17 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
               )
             })}
             {myRequests.length === 0 && (
-              <li className="text-xs text-[#8B9A97] py-4 text-center">
-                Nenhuma previsão ainda.
-              </li>
+              <li className="text-xs text-[#8B9A97] py-4 text-center">Nenhuma previsão ainda.</li>
             )}
           </ul>
         )}
 
         <form onSubmit={handleCreateRequest} className="mt-4 space-y-3">
           <div>
-            <label htmlFor="req-vehicle" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+            <label
+              htmlFor="req-vehicle"
+              className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+            >
               Veículo <span className="text-[#DC2626]">*</span>
             </label>
             <select
@@ -1297,7 +1303,10 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
               />
             </div>
             <div>
-              <label htmlFor="req-start" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+              <label
+                htmlFor="req-start"
+                className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+              >
                 Início <span className="text-[#DC2626]">*</span>
               </label>
               <input
@@ -1328,7 +1337,11 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
             disabled={reqBusy}
             className="w-full h-11 rounded-xl bg-[#EAB308]/10 hover:bg-[#EAB308]/20 border border-[#EAB308]/30 text-[#EAB308] font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            {reqBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarClock className="w-4 h-4" />}
+            {reqBusy ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <CalendarClock className="w-4 h-4" />
+            )}
             {reqBusy ? 'Enviando...' : 'Solicitar previsão'}
           </button>
         </form>
