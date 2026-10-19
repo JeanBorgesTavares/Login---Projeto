@@ -134,6 +134,20 @@ const statusMeta = {
   disabled: { label: 'Desativado', icon: XCircle, cls: 'text-[#DC2626]' },
 } as const
 
+// F1-017 (debug do teste humano): erros crus de constraint viram mensagem de operador.
+function msgAmigavel(msg: string): string {
+  if (msg.includes('arrival_window_max')) {
+    return 'Janela máxima de 4 horas — ajuste o início ou o fim.'
+  }
+  if (msg.includes('arrival_window_valid') || msg.includes('janela inválida')) {
+    return 'Janela inválida — o fim deve ser depois do início.'
+  }
+  if (msg.includes('arrival_window_check') || msg.includes('passado')) {
+    return 'A janela não pode começar no passado.'
+  }
+  return msg
+}
+
 // ---------------------------------------------------------------------------
 // F1-015 · SPEC-F1-03 · CA-F1-03-02/03 · S303/S304
 // Agenda interna: internos ativos (admin/operador) veem as previsões, decidem
@@ -292,7 +306,7 @@ function InternalAgenda() {
     })
     setCBusy(false)
     if (err) {
-      setCErr(err.message)
+      setCErr(msgAmigavel(err.message))
       return
     }
     setCDate('')
@@ -1503,7 +1517,7 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
     })
     setFBusy(false)
     if (error) {
-      setFErr(error.message)
+      setFErr(msgAmigavel(error.message))
       return
     }
     setFDate('')
@@ -1814,7 +1828,7 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
     })
     setReqBusy(false)
     if (error) {
-      setReqErr(error.message)
+      setReqErr(msgAmigavel(error.message))
       return
     }
     setReqDate('')
