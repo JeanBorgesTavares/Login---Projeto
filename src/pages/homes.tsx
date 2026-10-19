@@ -891,6 +891,129 @@ export function OperatorHome({ email, onLogout }: { email: string | null; onLogo
 }
 
 export function CompanyHome({ email, onLogout }: { email: string | null; onLogout: () => void }) {
+  // F1-014: Previsões da frota — a empresa cria previsões SOMENTE para seus
+  // vínculos ativos (motorista vinculado à empresa; veículo vinculado ao
+  // motorista). Validação completa no banco (RPC); a tela só lista opções.
+  type FleetRequest = {
+    id: string
+    kind: string
+    status: string
+    starts_at: string
+    ends_at: string
+    drivers: { full_name: string } | null
+    vehicles: { plate_normalized: string } | null
+  }
+  type FleetDriver = {
+    user_id: string
+    full_name: string
+  }
+  const [fleetRequests, setFleetRequests] = useState<FleetRequest[]>([])
+  const [fleetDrivers, setFleetDrivers] = useState<FleetDriver[]>([])
+  const [fleetLoading, setFleetLoading] = useState(true)
+  const [fDriver, setFDriver] = useState('')
+  const [fVehicle, setFVehicle] = useState('')
+  const [fVehicles, setFVehicles] = useState<Array<{ id: string; plate: string }>>([])
+  const [fKind, setFKind] = useState<'parking' | 'triage'>('parking')
+  const [fDate, setFDate] = useState('')
+  const [fStart, setFStart] = useState('')
+  const [fEnd, setFEnd] = useState('')
+  const [fBusy, setFBusy] = useState(false)
+  const [fMsg, setFMsg] = useState<string | null>(null)
+  const [fErr, setFErr] = useState<string | null>(null)
+
+  const loadFleet = async () => {
+    setFleetLoading(true)
+    const [reqRes, drvRes] = await Promise.all([
+      supabase
+        .from('arrival_requests')
+        .select(
+          'id, kind, status, starts_at, ends_at, drivers(full_name), vehicles(plate_normalized)',
+        )
+        .order('starts_at', { ascending: true }),
+      supabase
+        .from('company_driver_links')
+        .select('drivers(user_id, full_name)')
+        .eq('status', 'active'),
+    ])
+    if (!reqRes.error) {
+      setFleetRequests((reqRes.data ?? []) as FleetRequest[])
+    }
+    if (!drvRes.error) {
+      const rows = ((drvRes.data ?? []) as Array<{ drivers: FleetDriver | null }>)
+        .filter((r) => r.drivers)
+        .map((r) => r.drivers as FleetDriver)
+      setFleetDrivers(rows)
+    }
+    setFleetLoading(false)
+  }
+
+  const loadFleetVehicles = async (driverUserId: string) => {
+    setFVehicle('')
+    setFVehicles([])
+    if (!driverUserId) return
+    // Veículos do motorista via vínculos (RLS: empresa vê só o próprio contexto).
+    const { data } = await supabase
+      .from('drivers')
+      .select('id')
+      .eq('user_id', driverUserId)
+      .maybeSingle()
+    if (!data) return
+    const { data: links } = await supabase
+      .from('driver_vehicle_links')
+      .select('vehicles(id, plate_normalized)')
+      .is('valid_to', null)
+    const rows = (
+      (links ?? []) as Array<{ vehicles: { id: string; plate_normalized: string } | null }>
+    )
+      .filter((l) => l.vehicles)
+      .map((l) => ({ id: l.vehicles!.id, plate: l.vehicles!.plate_normalized }))
+    setFVehicles(rows)
+  }
+
+  useEffect(() => {
+    loadFleet()
+  }, [])
+
+  const handleFleetCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setFBusy(true)
+    setFMsg(null)
+    setFErr(null)
+    const startsIso = new Date(`${fDate}T${fStart}:00`).toISOString()
+    const endsIso = new Date(`${fDate}T${fEnd}:00`).toISOString()
+    const { error } = await supabase.rpc('create_arrival_request', {
+      p_vehicle_id: fVehicle,
+      p_kind: fKind,
+      p_starts_at: startsIso,
+      p_ends_at: endsIso,
+      p_driver_user_id: fDriver,
+    })
+    setFBusy(false)
+    if (error) {
+      setFErr(error.message)
+      return
+    }
+    setFDate('')
+    setFStart('')
+    setFEnd('')
+    setFDriver('')
+    setFVehicles([])
+    setFMsg('Previsão solicitada para o motorista vinculado. Aguarde a confirmação da equipe.')
+    await loadFleet()
+  }
+
+  const fleetStatusMeta: Record<string, { label: string; cls: string }> = {
+    requested: { label: 'Solicitada', cls: 'text-[#EAB308]' },
+    confirmed: { label: 'Confirmada', cls: 'text-[#16A34A]' },
+    rejected: { label: 'Recusada', cls: 'text-[#DC2626]' },
+    cancelled: { label: 'Cancelada', cls: 'text-[#8B9A97]' },
+    no_show: { label: 'Não compareceu', cls: 'text-[#DC2626]' },
+    arrived: { label: 'Chegou', cls: 'text-[#16A34A]' },
+  }
+
+  const fmtWindow = (iso: string) =>
+    new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+
   return (
     <HomeShell
       icon={<Building2 className="w-8 h-8" />}
@@ -900,6 +1023,207 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
       accent="purple"
       onLogout={onLogout}
     >
+      {/* --- F1-014: Previsões da frota --- */}
+      <section aria-labelledby="fleet-heading" className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 text-[#8B5CF6]" />
+            <h2 id="fleet-heading" className="text-sm font-semibold text-[#F7F9F8]">
+              Previsões da frota
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={loadFleet}
+            className="text-[#8B9A97] hover:text-[#F7F9F8] transition-colors"
+            aria-label="Recarregar previsões"
+          >
+            <RefreshCw className={`w-4 h-4 ${fleetLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {fleetLoading && fleetRequests.length === 0 ? (
+          <p role="status" className="text-xs text-[#8B9A97] py-4 text-center">
+            Carregando previsões...
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {fleetRequests.map((r) => {
+              const meta = fleetStatusMeta[r.status] ?? { label: r.status, cls: 'text-[#8B9A97]' }
+              return (
+                <li
+                  key={r.id}
+                  className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm text-[#F7F9F8] truncate">
+                        {r.drivers?.full_name ?? '—'}
+                        <span className="text-[#8B9A97]"> · </span>
+                        <span className="font-mono">{r.vehicles?.plate_normalized ?? '—'}</span>
+                      </p>
+                      <p className="text-[11px] text-[#8B9A97] mt-0.5">
+                        {r.kind === 'parking' ? 'Estacionamento' : 'Triagem'} ·{' '}
+                        {fmtWindow(r.starts_at)} → {fmtWindow(r.ends_at)}
+                      </p>
+                    </div>
+                    <span className={`text-[11px] font-semibold shrink-0 ${meta.cls}`}>
+                      {meta.label}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+            {fleetRequests.length === 0 && (
+              <li className="text-xs text-[#8B9A97] py-4 text-center">
+                Nenhuma previsão da frota ainda.
+              </li>
+            )}
+          </ul>
+        )}
+
+        <form onSubmit={handleFleetCreate} className="mt-4 space-y-3">
+          <div>
+            <label
+              htmlFor="fleet-driver"
+              className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+            >
+              Motorista vinculado <span className="text-[#DC2626]">*</span>
+            </label>
+            <select
+              id="fleet-driver"
+              value={fDriver}
+              onChange={(e) => {
+                setFDriver(e.target.value)
+                void loadFleetVehicles(e.target.value)
+              }}
+              required
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
+            >
+              <option value="">Selecione</option>
+              {fleetDrivers.map((d) => (
+                <option key={d.user_id} value={d.user_id}>
+                  {d.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label
+              htmlFor="fleet-vehicle"
+              className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+            >
+              Veículo do motorista <span className="text-[#DC2626]">*</span>
+            </label>
+            <select
+              id="fleet-vehicle"
+              value={fVehicle}
+              onChange={(e) => setFVehicle(e.target.value)}
+              required
+              disabled={!fDriver}
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40 disabled:opacity-50"
+            >
+              <option value="">{fDriver ? 'Selecione' : 'Escolha o motorista primeiro'}</option>
+              {fVehicles.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.plate}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="fleet-kind" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+              Finalidade
+            </label>
+            <select
+              id="fleet-kind"
+              value={fKind}
+              onChange={(e) => setFKind(e.target.value as 'parking' | 'triage')}
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
+            >
+              <option value="parking">Estacionamento</option>
+              <option value="triage">Triagem</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-3">
+              <label
+                htmlFor="fleet-date"
+                className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+              >
+                Data <span className="text-[#DC2626]">*</span>
+              </label>
+              <input
+                id="fleet-date"
+                type="date"
+                value={fDate}
+                onChange={(e) => setFDate(e.target.value)}
+                required
+                className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="fleet-start"
+                className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+              >
+                Início <span className="text-[#DC2626]">*</span>
+              </label>
+              <input
+                id="fleet-start"
+                type="time"
+                value={fStart}
+                onChange={(e) => setFStart(e.target.value)}
+                required
+                className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="fleet-end"
+                className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+              >
+                Fim <span className="text-[#DC2626]">*</span>
+              </label>
+              <input
+                id="fleet-end"
+                type="time"
+                value={fEnd}
+                onChange={(e) => setFEnd(e.target.value)}
+                required
+                className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={fBusy}
+            className="w-full h-11 rounded-xl bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 border border-[#8B5CF6]/30 text-[#8B5CF6] font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {fBusy ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <CalendarClock className="w-4 h-4" />
+            )}
+            {fBusy ? 'Enviando...' : 'Solicitar previsão'}
+          </button>
+        </form>
+        {fMsg && (
+          <p role="status" className="mt-3 text-xs text-[#16A34A] flex items-center gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5" /> {fMsg}
+          </p>
+        )}
+        {fErr && (
+          <p role="alert" className="mt-3 text-xs text-[#DC2626] flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5" /> {fErr}
+          </p>
+        )}
+        <p className="mt-3 text-[11px] text-[#8B9A97] leading-relaxed">
+          A empresa solicita apenas para motoristas vinculados. Previsão não é garantia de vaga e
+          toda solicitação fica pendente até a confirmação da equipe.
+        </p>
+      </section>
+
       <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
         <p className="text-xs text-[#8B9A97] leading-relaxed">
           Isolamento ativo: consultas da sua conta só retornam o contexto da sua empresa — o acesso
