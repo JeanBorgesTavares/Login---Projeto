@@ -260,7 +260,7 @@ function InternalAgenda() {
     })
     setBusy(null)
     if (err) {
-      if (decision === 'refuse') {
+      if (decision === 'refuse' || decision === 'reopen') {
         setRejectError(err.message)
       } else {
         setError(err.message)
@@ -397,6 +397,20 @@ function InternalAgenda() {
                         className="h-8 px-2.5 rounded-lg bg-[#EAB308]/10 hover:bg-[#EAB308]/20 border border-[#EAB308]/30 text-[#EAB308] text-[11px] font-semibold transition-all disabled:opacity-50"
                       >
                         {busy === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'No-show'}
+                      </button>
+                    )}
+                    {r.status === 'confirmed' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRejecting(r)
+                          setRejectReason('')
+                          setRejectError(null)
+                        }}
+                        disabled={busy === r.id}
+                        className="h-8 px-2.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-[#8B9A97] text-[11px] font-semibold transition-all disabled:opacity-50"
+                      >
+                        Reabrir
                       </button>
                     )}
                   </div>
@@ -549,12 +563,16 @@ function InternalAgenda() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`Recusar previsão de ${rejecting.drivers?.full_name ?? 'motorista'}`}
+          aria-label={`${
+            rejecting.status === 'confirmed' ? 'Reabrir' : 'Recusar'
+          } previsão de ${rejecting.drivers?.full_name ?? 'motorista'}`}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
         >
           <div className="w-full max-w-[420px] rounded-2xl border border-white/[0.08] bg-[#0A0A0A] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-card-fade-in">
             <div className="flex items-start justify-between gap-2 mb-4">
-              <h3 className="text-base font-bold text-[#F7F9F8]">Recusar previsão</h3>
+              <h3 className="text-base font-bold text-[#F7F9F8]">
+                {rejecting.status === 'confirmed' ? 'Reabrir previsão' : 'Recusar previsão'}
+              </h3>
               <button
                 type="button"
                 onClick={() => {
@@ -584,7 +602,11 @@ function InternalAgenda() {
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               rows={3}
-              placeholder="Ex.: pátio sem capacidade na janela solicitada"
+              placeholder={
+                rejecting.status === 'confirmed'
+                  ? 'Ex.: confirmação acidental'
+                  : 'Ex.: pátio sem capacidade na janela solicitada'
+              }
               className="w-full rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 py-3 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#DC2626]/40"
             />
             {rejectError && (
@@ -596,11 +618,17 @@ function InternalAgenda() {
               <button
                 type="button"
                 disabled={rejectReason.trim().length < 3 || busy === rejecting.id}
-                onClick={() => handleDecision(rejecting, 'refuse', rejectReason.trim())}
+                onClick={() =>
+                  handleDecision(
+                    rejecting,
+                    rejecting.status === 'confirmed' ? 'reopen' : 'refuse',
+                    rejectReason.trim(),
+                  )
+                }
                 className="flex-1 h-11 rounded-xl bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] font-semibold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {busy === rejecting.id ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Confirmar recusa
+                {rejecting.status === 'confirmed' ? 'Confirmar reabertura' : 'Confirmar recusa'}
               </button>
               <button
                 type="button"
