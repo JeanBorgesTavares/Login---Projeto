@@ -24,6 +24,7 @@ import {
   XCircle,
   X,
   Link2,
+  CalendarClock,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth, type UserRole } from '@/hooks/use-auth'
@@ -925,7 +926,98 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
   const [addMsg, setAddMsg] = useState<string | null>(null)
   const [addErr, setAddErr] = useState<string | null>(null)
 
+  // F1-013: Minhas previsões — autosserviço do motorista (S301/S307).
+  type MyRequest = {
+    id: string
+    kind: string
+    status: string
+    starts_at: string
+    ends_at: string
+    notes: string | null
+    vehicles: { plate_normalized: string } | null
+  }
+  const [myRequests, setMyRequests] = useState<MyRequest[]>([])
+  const [reqLoading, setReqLoading] = useState(true)
+  const [reqVehicle, setReqVehicle] = useState('')
+  const [reqKind, setReqKind] = useState<'parking' | 'triage'>('parking')
+  const [reqDate, setReqDate] = useState('')
+  const [reqStart, setReqStart] = useState('')
+  const [reqEnd, setReqEnd] = useState('')
+  const [reqBusy, setReqBusy] = useState(false)
+  const [reqMsg, setReqMsg] = useState<string | null>(null)
+  const [reqErr, setReqErr] = useState<string | null>(null)
+  const [cancelBusy, setCancelBusy] = useState<string | null>(null)
+
+  const loadMyRequests = async () => {
+    setReqLoading(true)
+    const { data, error } = await supabase
+      .from('arrival_requests')
+      .select('id, kind, status, starts_at, ends_at, notes, vehicles(plate_normalized)')
+      .order('starts_at', { ascending: true })
+    if (!error) {
+      setMyRequests((data ?? []) as MyRequest[])
+    }
+    setReqLoading(false)
+  }
+
+  const handleCreateRequest = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setReqBusy(true)
+    setReqMsg(null)
+    setReqErr(null)
+    // Janela em UTC a partir de data + hora local do usuário.
+    const startsIso = new Date(`${reqDate}T${reqStart}:00`).toISOString()
+    const endsIso = new Date(`${reqDate}T${reqEnd}:00`).toISOString()
+    const { error } = await supabase.rpc('create_arrival_request', {
+      p_vehicle_id: reqVehicle,
+      p_kind: reqKind,
+      p_starts_at: startsIso,
+      p_ends_at: endsIso,
+    })
+    setReqBusy(false)
+    if (error) {
+      setReqErr(error.message)
+      return
+    }
+    setReqDate('')
+    setReqStart('')
+    setReqEnd('')
+    setReqMsg('Previsão solicitada. Aguarde a confirmação da equipe — não é garantia de vaga.')
+    await loadMyRequests()
+  }
+
+  const handleCancelRequest = async (r: MyRequest) => {
+    setCancelBusy(r.id)
+    setReqErr(null)
+    const { error } = await supabase.rpc('change_arrival_request', {
+      p_request_id: r.id,
+      p_cancel: true,
+    })
+    setCancelBusy(null)
+    if (error) {
+      setReqErr(error.message)
+      return
+    }
+    await loadMyRequests()
+  }
+
+  const reqStatusMeta: Record<string, { label: string; cls: string }> = {
+    requested: { label: 'Solicitada', cls: 'text-[#EAB308]' },
+    confirmed: { label: 'Confirmada', cls: 'text-[#16A34A]' },
+    rejected: { label: 'Recusada', cls: 'text-[#DC2626]' },
+    cancelled: { label: 'Cancelada', cls: 'text-[#8B9A97]' },
+    no_show: { label: 'Não compareceu', cls: 'text-[#DC2626]' },
+    arrived: { label: 'Chegou', cls: 'text-[#16A34A]' },
+    draft: { label: 'Rascunho', cls: 'text-[#8B9A97]' },
+  }
+
+  const fmtWindow = (iso: string) => {
+    const d = new Date(iso)
+    return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+  }
+
   const loadMyVehicles = async () => {
+>>>>>>>
     setVehiclesLoading(true)
     const { data, error } = await supabase
       .from('driver_vehicle_links')
@@ -940,6 +1032,7 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
 
   useEffect(() => {
     loadMyVehicles()
+    loadMyRequests()
   }, [])
 
   const handleAddVehicle = async (e: React.FormEvent) => {
@@ -1086,10 +1179,178 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
         </p>
       </section>
 
+      {/* --- F1-013: Minhas previsões --- */}
+      <section aria-labelledby="my-requests-heading" className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 text-[#EAB308]" />
+            <h2 id="my-requests-heading" className="text-sm font-semibold text-[#F7F9F8]">
+              Minhas previsões
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={loadMyRequests}
+            className="text-[#8B9A97] hover:text-[#F7F9F8] transition-colors"
+            aria-label="Recarregar previsões"
+          >
+            <RefreshCw className={`w-4 h-4 ${reqLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {reqLoading && myRequests.length === 0 ? (
+          <p role="status" className="text-xs text-[#8B9A97] py-4 text-center">
+            Carregando previsões...
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {myRequests.map((r) => {
+              const meta = reqStatusMeta[r.status] ?? { label: r.status, cls: 'text-[#8B9A97]' }
+              const cancellable = r.status === 'requested' || r.status === 'confirmed'
+              return (
+                <li
+                  key={r.id}
+                  className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm text-[#F7F9F8] font-mono truncate">
+                        {r.vehicles?.plate_normalized ?? '—'}
+                        <span className="text-[#8B9A97] font-sans">
+                          {' '}
+                          · {r.kind === 'parking' ? 'Estacionamento' : 'Triagem'}
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-[#8B9A97] mt-0.5">{fmtWindow(r.starts_at)} → {fmtWindow(r.ends_at)}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[11px] font-semibold ${meta.cls}`}>{meta.label}</span>
+                      {cancellable && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancelRequest(r)}
+                          disabled={cancelBusy === r.id}
+                          className="h-8 px-2.5 rounded-lg bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] text-[11px] font-semibold transition-all disabled:opacity-50"
+                        >
+                          {cancelBusy === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Cancelar'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+            {myRequests.length === 0 && (
+              <li className="text-xs text-[#8B9A97] py-4 text-center">
+                Nenhuma previsão ainda.
+              </li>
+            )}
+          </ul>
+        )}
+
+        <form onSubmit={handleCreateRequest} className="mt-4 space-y-3">
+          <div>
+            <label htmlFor="req-vehicle" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+              Veículo <span className="text-[#DC2626]">*</span>
+            </label>
+            <select
+              id="req-vehicle"
+              value={reqVehicle}
+              onChange={(e) => setReqVehicle(e.target.value)}
+              required
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#EAB308]/40"
+            >
+              <option value="">Selecione</option>
+              {myVehicles.map((mv) => (
+                <option key={mv.id} value={(mv.vehicles as { id?: string })?.id ?? ''}>
+                  {mv.vehicles?.plate_normalized}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="req-kind" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+              Finalidade
+            </label>
+            <select
+              id="req-kind"
+              value={reqKind}
+              onChange={(e) => setReqKind(e.target.value as 'parking' | 'triage')}
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#EAB308]/40"
+            >
+              <option value="parking">Estacionamento</option>
+              <option value="triage">Triagem</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-3">
+              <label htmlFor="req-date" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+                Data <span className="text-[#DC2626]">*</span>
+              </label>
+              <input
+                id="req-date"
+                type="date"
+                value={reqDate}
+                onChange={(e) => setReqDate(e.target.value)}
+                required
+                className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#EAB308]/40"
+              />
+            </div>
+            <div>
+              <label htmlFor="req-start" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+                Início <span className="text-[#DC2626]">*</span>
+              </label>
+              <input
+                id="req-start"
+                type="time"
+                value={reqStart}
+                onChange={(e) => setReqStart(e.target.value)}
+                required
+                className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#EAB308]/40"
+              />
+            </div>
+            <div>
+              <label htmlFor="req-end" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+                Fim <span className="text-[#DC2626]">*</span>
+              </label>
+              <input
+                id="req-end"
+                type="time"
+                value={reqEnd}
+                onChange={(e) => setReqEnd(e.target.value)}
+                required
+                className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#EAB308]/40"
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={reqBusy}
+            className="w-full h-11 rounded-xl bg-[#EAB308]/10 hover:bg-[#EAB308]/20 border border-[#EAB308]/30 text-[#EAB308] font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {reqBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarClock className="w-4 h-4" />}
+            {reqBusy ? 'Enviando...' : 'Solicitar previsão'}
+          </button>
+        </form>
+        {reqMsg && (
+          <p role="status" className="mt-3 text-xs text-[#16A34A] flex items-center gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5" /> {reqMsg}
+          </p>
+        )}
+        {reqErr && (
+          <p role="alert" className="mt-3 text-xs text-[#DC2626] flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5" /> {reqErr}
+          </p>
+        )}
+        <p className="mt-3 text-[11px] text-[#8B9A97] leading-relaxed">
+          Previsão não é garantia de vaga. Toda solicitação fica pendente até a confirmação da
+          equipe. Janela máxima de 4 horas e até 60 dias à frente.
+        </p>
+      </section>
+
       <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
         <p className="text-xs text-[#8B9A97] leading-relaxed">
-          Isolamento ativo: previsões e histórico chegam nas próximas fases; hoje você confirma o
-          acesso, o perfil correto de motorista e seus veículos.
+          Isolamento ativo: você vê apenas as suas previsões e os seus veículos.
         </p>
       </div>
     </HomeShell>
