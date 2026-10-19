@@ -134,6 +134,459 @@ const statusMeta = {
   disabled: { label: 'Desativado', icon: XCircle, cls: 'text-[#DC2626]' },
 } as const
 
+// ---------------------------------------------------------------------------
+// F1-015 · SPEC-F1-03 · CA-F1-03-02/03 · S303/S304
+// Agenda interna: internos ativos (admin/operador) veem as previsões, decidem
+// (confirmar / recusar com motivo / no-show após a janela) e criam previsão
+// por terceiro. Toda decisão passa pela RPC review_arrival_request — RLS e
+// auditoria ficam no banco; a tela nunca promete vaga.
+// ---------------------------------------------------------------------------
+
+function InternalAgenda() {
+  type AgendaRow = {
+    id: string
+    kind: string
+    status: string
+    starts_at: string
+    ends_at: string
+    source: string
+    drivers: { full_name: string } | null
+    vehicles: { plate_normalized: string } | null
+  }
+  const [rows, setRows] = useState<AgendaRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [rejecting, setRejecting] = useState<AgendaRow | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectError, setRejectError] = useState<string | null>(null)
+
+  // Criação por terceiro: interno cria previsão para motorista ativo com
+  // veículo vinculado (validação completa na RPC — a tela só lista opções).
+  const [drivers, setDrivers] = useState<Array<{ user_id: string; full_name: string }>>([])
+  const [cDriver, setCDriver] = useState('')
+  const [cVehicles, setCVehicles] = useState<Array<{ id: string; plate: string }>>([])
+  const [cVehicle, setCVehicle] = useState('')
+  const [cKind, setCKind] = useState<'parking' | 'triage'>('parking')
+  const [cDate, setCDate] = useState('')
+  const [cStart, setCStart] = useState('')
+  const [cEnd, setCEnd] = useState('')
+  const [cBusy, setCBusy] = useState(false)
+  const [cMsg, setCMsg] = useState<string | null>(null)
+  const [cErr, setCErr] = useState<string | null>(null)
+
+  const statusMeta: Record<string, { label: string; cls: string }> = {
+    requested: { label: 'Solicitada', cls: 'text-[#EAB308]' },
+    confirmed: { label: 'Confirmada', cls: 'text-[#16A34A]' },
+    rejected: { label: 'Recusada', cls: 'text-[#DC2626]' },
+    cancelled: { label: 'Cancelada', cls: 'text-[#8B9A97]' },
+    no_show: { label: 'Não compareceu', cls: 'text-[#DC2626]' },
+    arrived: { label: 'Chegou', cls: 'text-[#16A34A]' },
+  }
+
+  const sourceLabel: Record<string, string> = {
+    driver: 'motorista',
+    company: 'empresa',
+    internal: 'interno',
+  }
+
+  const fmtWindow = (iso: string) =>
+    new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+
+  const load = async () => {
+    setLoading(true)
+    setError(null)
+    const { data, error: err } = await supabase
+      .from('arrival_requests')
+      .select(
+        'id, kind, status, starts_at, ends_at, source, drivers(full_name), vehicles(plate_normalized)',
+      )
+      .order('starts_at', { ascending: true })
+    if (err) {
+      setError('Não foi possível carregar a agenda. Tente novamente.')
+    } else {
+      setRows((data ?? []) as AgendaRow[])
+    }
+    setLoading(false)
+  }
+
+  const loadDrivers = async () => {
+    const { data } = await supabase
+      .from('drivers')
+      .select('user_id, full_name')
+      .order('full_name', { ascending: true })
+    if (data) {
+      setDrivers(
+        (data as Array<{ user_id: string; full_name: string }>).filter((d) => d.full_name),
+      )
+    }
+  }
+
+  const loadVehicles = async (driverUserId: string) => {
+    setCVehicle('')
+    setCVehicles([])
+    if (!driverUserId) return
+    const { data } = await supabase.from('drivers').select('id').eq('user_id', driverUserId).maybeSingle()
+    if (!data) return
+    const { data: links } = await supabase
+      .from('driver_vehicle_links')
+      .select('vehicles(id, plate_normalized)')
+      .eq('driver_id', data.id)
+      .is('valid_to', null)
+    const list = ((links ?? []) as Array<{ vehicles: { id: string; plate_normalized: string } | null }>)
+      .filter((l) => l.vehicles)
+      .map((l) => ({ id: l.vehicles!.id, plate: l.vehicles!.plate_normalized }))
+    setCVehicles(list)
+  }
+
+  const handleDecision = async (r: AgendaRow, decision: 'confirm' | 'refuse' | 'no_show', reason?: string) => {
+    setBusy(r.id)
+    setRejectError(null)
+    setError(null)
+    const { error: err } = await supabase.rpc('review_arrival_request', {
+      p_request_id: r.id,
+      p_decision: decision,
+      p_reason: reason ?? null,
+    })
+    setBusy(null)
+    if (err) {
+      if (decision === 'refuse') {
+        setRejectError(err.message)
+      } else {
+        setError(err.message)
+      }
+      return
+    }
+    setRejecting(null)
+    setRejectReason('')
+    await load()
+  }
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setCBusy(true)
+    setCMsg(null)
+    setCErr(null)
+    const startsIso = new Date(`${cDate}T${cStart}:00`).toISOString()
+    const endsIso = new Date(`${cDate}T${cEnd}:00`).toISOString()
+    const { error: err } = await supabase.rpc('create_arrival_request', {
+      p_vehicle_id: cVehicle,
+      p_kind: cKind,
+      p_starts_at: startsIso,
+      p_ends_at: endsIso,
+      p_driver_user_id: cDriver,
+    })
+    setCBusy(false)
+    if (err) {
+      setCErr(err.message)
+      return
+    }
+    setCDate('')
+    setCStart('')
+    setCEnd('')
+    setCDriver('')
+    setCVehicles([])
+    setCMsg('Previsão criada em nome do motorista. Ela nasce solicitada — não é garantia de vaga.')
+    await load()
+  }
+
+  useEffect(() => {
+    void load()
+    void loadDrivers()
+  }, [])
+
+  return (
+    <section aria-labelledby="agenda-heading" className="mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <CalendarClock className="w-4 h-4 text-[#16A34A]" />
+          <h2 id="agenda-heading" className="text-sm font-semibold text-[#F7F9F8]">
+            Agenda de previsões
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          className="text-[#8B9A97] hover:text-[#F7F9F8] transition-colors"
+          aria-label="Recarregar agenda"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </div>
+      </div>
+
+      {error && (
+        <div role="alert" className="mb-2 p-3 rounded-xl border border-[#DC2626]/30 bg-[#DC2626]/5">
+          <p className="text-xs text-[#DC2626]">{error}</p>
+        </div>
+      )}
+
+      {loading && rows.length === 0 ? (
+        <p role="status" className="text-xs text-[#8B9A97] py-4 text-center">
+          Carregando agenda...
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {rows.map((r) => {
+            const meta = statusMeta[r.status] ?? { label: r.status, cls: 'text-[#8B9A97]' }
+            const canDecide = r.status === 'requested'
+            const canNoShow = r.status === 'confirmed' && new Date(r.ends_at) < new Date()
+            return (
+              <li key={r.id} className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm text-[#F7F9F8] truncate">
+                      {r.drivers?.full_name ?? '—'}
+                      <span className="text-[#8B9A97]"> · </span>
+                      <span className="font-mono">{r.vehicles?.plate_normalized ?? '—'}</span>
+                    </p>
+                    <p className="text-[11px] text-[#8B9A97] mt-0.5">
+                      {r.kind === 'parking' ? 'Estacionamento' : 'Triagem'} · por{' '}
+                      {sourceLabel[r.source] ?? r.source} · {fmtWindow(r.starts_at)} →{' '}
+                      {fmtWindow(r.ends_at)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[11px] font-semibold ${meta.cls}`}>{meta.label}</span>
+                    {canDecide && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleDecision(r, 'confirm')}
+                          disabled={busy === r.id}
+                          className="h-8 px-2.5 rounded-lg bg-[#16A34A]/10 hover:bg-[#16A34A]/20 border border-[#16A34A]/30 text-[#16A34A] text-[11px] font-semibold transition-all disabled:opacity-50"
+                        >
+                          {busy === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirmar'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRejecting(r)
+                            setRejectReason('')
+                            setRejectError(null)
+                          }}
+                          disabled={busy === r.id}
+                          className="h-8 px-2.5 rounded-lg bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] text-[11px] font-semibold transition-all disabled:opacity-50"
+                        >
+                          Recusar
+                        </button>
+                      </>
+                    )}
+                    {canNoShow && (
+                      <button
+                        type="button"
+                        onClick={() => handleDecision(r, 'no_show')}
+                        disabled={busy === r.id}
+                        className="h-8 px-2.5 rounded-lg bg-[#EAB308]/10 hover:bg-[#EAB308]/20 border border-[#EAB308]/30 text-[#EAB308] text-[11px] font-semibold transition-all disabled:opacity-50"
+                      >
+                        {busy === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'No-show'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </li>
+            )
+          })}
+          {rows.length === 0 && (
+            <li className="text-xs text-[#8B9A97] py-4 text-center">Nenhuma previsão na agenda.</li>
+          )}
+        </ul>
+      )}
+
+      <form onSubmit={handleCreate} className="mt-4 space-y-3">
+        <div>
+          <label htmlFor="agenda-driver" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+            Motorista <span className="text-[#DC2626]">*</span>
+          </label>
+          <select
+            id="agenda-driver"
+            value={cDriver}
+            onChange={(e) => {
+              setCDriver(e.target.value)
+              void loadVehicles(e.target.value)
+            }}
+            required
+            className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#16A34A]/40"
+          >
+            <option value="">Selecione</option>
+            {drivers.map((d) => (
+              <option key={d.user_id} value={d.user_id}>
+                {d.full_name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="agenda-vehicle" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+            Veículo do motorista <span className="text-[#DC2626]">*</span>
+          </label>
+          <select
+            id="agenda-vehicle"
+            value={cVehicle}
+            onChange={(e) => setCVehicle(e.target.value)}
+            required
+            disabled={!cDriver}
+            className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#16A34A]/40 disabled:opacity-50"
+          >
+            <option value="">{cDriver ? 'Selecione' : 'Escolha o motorista primeiro'}</option>
+            {cVehicles.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.plate}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="agenda-kind" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+            Finalidade
+          </label>
+          <select
+            id="agenda-kind"
+            value={cKind}
+            onChange={(e) => setCKind(e.target.value as 'parking' | 'triage')}
+            className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#16A34A]/40"
+          >
+            <option value="parking">Estacionamento</option>
+            <option value="triage">Triagem</option>
+          </select>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="col-span-3">
+            <label htmlFor="agenda-date" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+              Data <span className="text-[#DC2626]">*</span>
+            </label>
+            <input
+              id="agenda-date"
+              type="date"
+              value={cDate}
+              onChange={(e) => setCDate(e.target.value)}
+              required
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#16A34A]/40"
+            />
+          </div>
+          <div>
+            <label htmlFor="agenda-start" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+              Início <span className="text-[#DC2626]">*</span>
+            </label>
+            <input
+              id="agenda-start"
+              type="time"
+              value={cStart}
+              onChange={(e) => setCStart(e.target.value)}
+              required
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#16A34A]/40"
+            />
+          </div>
+          <div>
+            <label htmlFor="agenda-end" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+              Fim <span className="text-[#DC2626]">*</span>
+            </label>
+            <input
+              id="agenda-end"
+              type="time"
+              value={cEnd}
+              onChange={(e) => setCEnd(e.target.value)}
+              required
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#16A34A]/40"
+            />
+          </div>
+        </div>
+        <button
+          type="submit"
+          disabled={cBusy}
+          className="w-full h-11 rounded-xl bg-[#16A34A]/10 hover:bg-[#16A34A]/20 border border-[#16A34A]/30 text-[#16A34A] font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {cBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          {cBusy ? 'Criando...' : 'Criar previsão para o motorista'}
+        </button>
+      </form>
+      {cMsg && (
+        <p role="status" className="mt-3 text-xs text-[#16A34A] flex items-center gap-2">
+          <CheckCircle2 className="w-3.5 h-3.5" /> {cMsg}
+        </p>
+      )}
+      {cErr && (
+        <p role="alert" className="mt-3 text-xs text-[#DC2626] flex items-center gap-2">
+          <AlertTriangle className="w-3.5 h-3.5" /> {cErr}
+        </p>
+      )}
+      <p className="mt-3 text-[11px] text-[#8B9A97] leading-relaxed">
+        Previsão não é garantia de vaga. Recusa exige motivo e tudo fica auditado (quem decidiu,
+        quando e por quê). No-show só após o fim da janela.
+      </p>
+
+      {/* --- Modal de recusa com motivo obrigatório --- */}
+      {rejecting && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Recusar previsão de ${rejecting.drivers?.full_name ?? 'motorista'}`}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+        >
+          <div className="w-full max-w-[420px] rounded-2xl border border-white/[0.08] bg-[#0A0A0A] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-card-fade-in">
+            <div className="flex items-start justify-between gap-2 mb-4">
+              <h3 className="text-base font-bold text-[#F7F9F8]">Recusar previsão</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setRejecting(null)
+                  setRejectReason('')
+                }}
+                aria-label="Fechar"
+                className="text-[#8B9A97] hover:text-[#F7F9F8]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-sm text-[#8B9A97] mb-4">
+              <span className="text-[#F7F9F8] font-medium">
+                {rejecting.drivers?.full_name ?? '—'}
+              </span>{' '}
+              · <span className="font-mono">{rejecting.vehicles?.plate_normalized ?? '—'}</span>
+            </p>
+            <label htmlFor="agenda-reject-reason" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+              Motivo da recusa <span className="text-[#DC2626]">*</span>
+            </label>
+            <textarea
+              id="agenda-reject-reason"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+              placeholder="Ex.: pátio sem capacidade na janela solicitada"
+              className="w-full rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 py-3 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#DC2626]/40"
+            />
+            {rejectError && (
+              <p role="alert" className="mt-3 text-xs text-[#DC2626] flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {rejectError}
+              </p>
+            )}
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                disabled={rejectReason.trim().length < 3 || busy === rejecting.id}
+                onClick={() => handleDecision(rejecting, 'refuse', rejectReason.trim())}
+                className="flex-1 h-11 rounded-xl bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] font-semibold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {busy === rejecting.id ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Confirmar recusa
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRejecting(null)
+                  setRejectReason('')
+                }}
+                className="h-11 px-4 rounded-xl border border-white/[0.08] text-[#8B9A97] hover:text-[#F7F9F8] text-sm font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
 export function AdminHome({ email, onLogout }: { email: string | null; onLogout: () => void }) {
   const { profile } = useAuth()
   const [rows, setRows] = useState<InternalRow[]>([])
@@ -689,6 +1142,9 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
         )}
       </section>
 
+      {/* --- F1-015: Agenda de previsões (decisão e criação por terceiro) --- */}
+      <InternalAgenda />
+
       {/* --- Lista de internos --- */}
       <section aria-labelledby="internals-heading">
         <div className="flex items-center justify-between mb-3">
@@ -879,13 +1335,8 @@ export function OperatorHome({ email, onLogout }: { email: string | null; onLogo
       accent="blue"
       onLogout={onLogout}
     >
-      <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-        <p className="text-xs text-[#8B9A97] leading-relaxed">
-          Sua home de operador está ativa. As funções operacionais (triagem, filas e check-in) serão
-          liberadas nas fases seguintes do plano — nesta fase você confirma o acesso e o perfil
-          correto.
-        </p>
-      </div>
+      {/* --- F1-015: Agenda de previsões também na home do operador --- */}
+      <InternalAgenda />
     </HomeShell>
   )
 }
