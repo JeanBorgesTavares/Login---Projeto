@@ -961,6 +961,7 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
     const { data: links } = await supabase
       .from('driver_vehicle_links')
       .select('vehicles(id, plate_normalized)')
+      .eq('driver_id', data.id)
       .is('valid_to', null)
     const rows = (
       (links ?? []) as Array<{ vehicles: { id: string; plate_normalized: string } | null }>
