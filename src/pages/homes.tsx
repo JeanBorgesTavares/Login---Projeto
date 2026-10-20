@@ -646,6 +646,31 @@ function InternalAgenda() {
         </ul>
       )}
 
+      {/* --- F1-022: painel de ocupação (S406 — conta só visitas abertas) --- */}
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        {[
+          { type: 'truck', label: 'Caminhões', ref: 500 },
+          { type: 'car', label: 'Carros', ref: 100 },
+          { type: 'motorcycle', label: 'Motos', ref: 100 },
+        ].map((t) => {
+          const n = visits.filter((v) => v.vehicle_type === t.type).length
+          return (
+            <div
+              key={t.type}
+              className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-center"
+            >
+              <p className="text-xl font-extrabold text-[#F7F9F8]">{n}</p>
+              <p className="text-[11px] text-[#8B9A97] mt-0.5">{t.label}</p>
+              <p className="text-[10px] text-[#8B9A97]/60">capac. ref. {t.ref}</p>
+            </div>
+          )
+        })}
+      </div>
+      <p className="mt-2 text-[10px] text-[#8B9A97]/70">
+        Ocupação conta apenas veículos presentes (visitas abertas). Capacidade é referência
+        operacional, não garantia de vaga.
+      </p>
+
       {/* --- F1-019: espelho de quem está presente no pátio agora --- */}
       <div className="mt-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
         <div className="flex items-center justify-between mb-2">
