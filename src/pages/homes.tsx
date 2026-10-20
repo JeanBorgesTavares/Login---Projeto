@@ -201,6 +201,50 @@ function InternalAgenda() {
   const [ciErr, setCiErr] = useState<string | null>(null)
   const [ciMsg, setCiMsg] = useState<string | null>(null)
 
+  // F1-020: reconciliação — vincular visita provisória a motorista validado
+  // (mesmo visit.id, motivo obrigatório, correção de vínculo errado auditada).
+  const [linkVisit, setLinkVisit] = useState<{
+    id: string
+    plate: string
+    driverName: string | null
+  } | null>(null)
+  const [lkDriver, setLkDriver] = useState('')
+  const [lkReason, setLkReason] = useState('')
+  const [lkBusy, setLkBusy] = useState(false)
+  const [lkErr, setLkErr] = useState<string | null>(null)
+  const [lkMsg, setLkMsg] = useState<string | null>(null)
+
+  const openLink = (v: {
+    id: string
+    plate_snapshot: string
+    drivers: { full_name: string } | null
+  }) => {
+    setLinkVisit({ id: v.id, plate: v.plate_snapshot, driverName: v.drivers?.full_name ?? null })
+    setLkDriver('')
+    setLkReason('')
+    setLkErr(null)
+    setLkMsg(null)
+  }
+
+  const handleLink = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLkBusy(true)
+    setLkErr(null)
+    setLkMsg(null)
+    const { data, error: err } = await supabase.rpc('link_visit_driver', {
+      p_visit_id: linkVisit?.id ?? null,
+      p_driver_user_id: lkDriver || null,
+      p_reason: lkReason,
+    })
+    setLkBusy(false)
+    if (err) {
+      setLkErr(err.message)
+      return
+    }
+    setLkMsg('Motorista vinculado à visita. Histórico preservado.')
+    await loadVisits()
+  }
+
   // F1-019 (ajuste do teste humano): espelho de quem está presente no pátio.
   const [visits, setVisits] = useState<
     Array<{
@@ -595,18 +639,39 @@ function InternalAgenda() {
           <ul className="space-y-1.5">
             {visits.map((v) => (
               <li key={v.id} className="flex items-center justify-between gap-2 text-xs">
-                <span className="font-mono text-[#F7F9F8]">{v.plate_snapshot}</span>
-                <span className="text-[#8B9A97] truncate">
-                  {v.drivers?.full_name ?? v.provisional_driver_name ?? '—'} ·{' '}
-                  {v.vehicle_type === 'truck'
-                    ? 'Caminhão'
-                    : v.vehicle_type === 'car'
-                      ? 'Carro'
-                      : 'Moto'}
-                  {v.arrived_at
-                    ? ` · ${new Date(v.arrived_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`
-                    : ''}
-                </span>
+                <div className="min-w-0">
+                  <span className="font-mono text-[#F7F9F8]">{v.plate_snapshot}</span>
+                  <span className="text-[#8B9A97] truncate">
+                    {' '}
+                    · {v.drivers?.full_name ?? v.provisional_driver_name ?? '—'} ·{' '}
+                    {v.vehicle_type === 'truck'
+                      ? 'Caminhão'
+                      : v.vehicle_type === 'car'
+                        ? 'Carro'
+                        : 'Moto'}
+                    {v.arrived_at
+                      ? ` · ${new Date(v.arrived_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`
+                      : ''}
+                  </span>
+                </div>
+                {!v.drivers && (
+                  <button
+                    type="button"
+                    onClick={() => openLink(v)}
+                    className="shrink-0 h-7 px-2 rounded-lg bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 border border-[#8B5CF6]/30 text-[#8B5CF6] text-[11px] font-semibold transition-all"
+                  >
+                    Vincular motorista
+                  </button>
+                )}
+                {v.drivers && (
+                  <button
+                    type="button"
+                    onClick={() => openLink(v)}
+                    className="shrink-0 h-7 px-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-[#8B9A97] text-[11px] font-semibold transition-all"
+                  >
+                    Corrigir vínculo
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -895,6 +960,115 @@ function InternalAgenda() {
             {ciMsg && (
               <p role="status" className="mt-3 text-xs text-[#16A34A] flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5" /> {ciMsg}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* --- F1-020: modal de reconciliação (vincular/corrigir motorista) --- */}
+      {linkVisit && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Vincular motorista à visita"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+        >
+          <div className="w-full max-w-[440px] rounded-2xl border border-white/[0.08] bg-[#0A0A0A] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-card-fade-in">
+            <div className="flex items-start justify-between gap-2 mb-4">
+              <h3 className="text-base font-bold text-[#F7F9F8]">
+                {linkVisit.driverName
+                  ? 'Corrigir vínculo da visita'
+                  : 'Vincular motorista à visita'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setLinkVisit(null)}
+                aria-label="Fechar"
+                className="text-[#8B9A97] hover:text-[#F7F9F8]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-[#8B9A97] mb-4">
+              Visita da placa <span className="font-mono text-[#F7F9F8]">{linkVisit.plate}</span>
+              {linkVisit.driverName ? (
+                <>
+                  {' '}
+                  atualmente vinculada a{' '}
+                  <span className="text-[#F7F9F8]">{linkVisit.driverName}</span>. A correção fica
+                  auditada com seu nome e motivo.
+                </>
+              ) : (
+                ' — sem motorista validado. A reconciliação preserva o mesmo ID e o histórico da visita.'
+              )}
+            </p>
+            <form onSubmit={handleLink} className="space-y-3">
+              <div>
+                <label
+                  htmlFor="lk-driver"
+                  className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+                >
+                  Motorista <span className="text-[#DC2626]">*</span>
+                </label>
+                <select
+                  id="lk-driver"
+                  value={lkDriver}
+                  onChange={(e) => setLkDriver(e.target.value)}
+                  required
+                  className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
+                >
+                  <option value="">Selecione</option>
+                  {drivers.map((d) => (
+                    <option key={d.user_id} value={d.user_id}>
+                      {d.full_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label
+                  htmlFor="lk-reason"
+                  className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+                >
+                  Motivo <span className="text-[#DC2626]">*</span>
+                </label>
+                <input
+                  id="lk-reason"
+                  value={lkReason}
+                  onChange={(e) => setLkReason(e.target.value)}
+                  placeholder="Ex.: motorista identificado no guichê"
+                  required
+                  minLength={3}
+                  className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
+                />
+              </div>
+              {lkErr && (
+                <p role="alert" className="text-xs text-[#DC2626] flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {lkErr}
+                </p>
+              )}
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={lkBusy}
+                  className="flex-1 h-11 rounded-xl bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 border border-[#8B5CF6]/30 text-[#8B5CF6] font-semibold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {lkBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Confirmar vínculo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLinkVisit(null)}
+                  className="h-11 px-4 rounded-xl border border-white/[0.08] text-[#8B9A97] hover:text-[#F7F9F8] text-sm font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+            {lkMsg && (
+              <p role="status" className="mt-3 text-xs text-[#16A34A] flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5" /> {lkMsg}
               </p>
             )}
           </div>
