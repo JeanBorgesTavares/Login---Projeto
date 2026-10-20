@@ -226,6 +226,45 @@ function InternalAgenda() {
     setLkMsg(null)
   }
 
+  // F1-021: check-out — saída única; dados incompletos exigem exceção com motivo.
+  const [outVisit, setOutVisit] = useState<{ id: string; plate: string } | null>(null)
+  const [outException, setOutException] = useState(false)
+  const [outNote, setOutNote] = useState('')
+  const [outBusy, setOutBusy] = useState(false)
+  const [outErr, setOutErr] = useState<string | null>(null)
+  const [outMsg, setOutMsg] = useState<string | null>(null)
+
+  const openCheckout = (v: { id: string; plate_snapshot: string }) => {
+    setOutVisit({ id: v.id, plate: v.plate_snapshot })
+    setOutException(false)
+    setOutNote('')
+    setOutErr(null)
+    setOutMsg(null)
+  }
+
+  const handleCheckout = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setOutBusy(true)
+    setOutErr(null)
+    setOutMsg(null)
+    const { data, error: err } = await supabase.rpc('check_out_visit', {
+      p_visit_id: outVisit?.id ?? null,
+      p_release_state: outException ? 'exception' : 'recorded',
+      p_release_note: outNote || null,
+    })
+    setOutBusy(false)
+    if (err) {
+      setOutErr(err.message)
+      return
+    }
+    setOutMsg(
+      outException
+        ? 'Saída registrada com exceção — motivo e responsável gravados.'
+        : 'Saída registrada.',
+    )
+    await loadVisits()
+  }
+
   const handleLink = async (e: React.FormEvent) => {
     e.preventDefault()
     setLkBusy(true)
@@ -654,6 +693,13 @@ function InternalAgenda() {
                       : ''}
                   </span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => openCheckout(v)}
+                  className="shrink-0 h-7 px-2 rounded-lg bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] text-[11px] font-semibold transition-all"
+                >
+                  Registrar saída
+                </button>
                 {!v.drivers && (
                   <button
                     type="button"
@@ -960,6 +1006,97 @@ function InternalAgenda() {
             {ciMsg && (
               <p role="status" className="mt-3 text-xs text-[#16A34A] flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5" /> {ciMsg}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* --- F1-021: modal de check-out (saída normal ou exceção) --- */}
+      {outVisit && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Registrar saída"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+        >
+          <div className="w-full max-w-[440px] rounded-2xl border border-white/[0.08] bg-[#0A0A0A] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-card-fade-in">
+            <div className="flex items-start justify-between gap-2 mb-4">
+              <h3 className="text-base font-bold text-[#F7F9F8]">Registrar saída</h3>
+              <button
+                type="button"
+                onClick={() => setOutVisit(null)}
+                aria-label="Fechar"
+                className="text-[#8B9A97] hover:text-[#F7F9F8]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-[#8B9A97] mb-4">
+              Visita da placa <span className="font-mono text-[#F7F9F8]">{outVisit.plate}</span>. A
+              saída é única — reenvio não cria segunda saída.
+            </p>
+            <form onSubmit={handleCheckout} className="space-y-3">
+              <label className="flex items-center gap-2 text-xs text-[#F7F9F8]">
+                <input
+                  type="checkbox"
+                  checked={outException}
+                  onChange={(e) => setOutException(e.target.checked)}
+                  className="w-4 h-4 accent-[#EAB308]"
+                />
+                Saída com exceção (dados/acerto incompletos)
+              </label>
+              <div>
+                <label
+                  htmlFor="out-note"
+                  className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+                >
+                  {outException ? (
+                    <>
+                      Motivo da exceção <span className="text-[#DC2626]">*</span>
+                    </>
+                  ) : (
+                    'Observação (opcional)'
+                  )}
+                </label>
+                <input
+                  id="out-note"
+                  value={outNote}
+                  onChange={(e) => setOutNote(e.target.value)}
+                  placeholder={
+                    outException ? 'Ex.: sem acerto completo no caixa' : 'Ex.: pagamento conferido'
+                  }
+                  required={outException}
+                  minLength={outException ? 3 : 0}
+                  className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#DC2626]/40"
+                />
+              </div>
+              {outErr && (
+                <p role="alert" className="text-xs text-[#DC2626] flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {outErr}
+                </p>
+              )}
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={outBusy}
+                  className="flex-1 h-11 rounded-xl bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] font-semibold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {outBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Confirmar saída
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOutVisit(null)}
+                  className="h-11 px-4 rounded-xl border border-white/[0.08] text-[#8B9A97] hover:text-[#F7F9F8] text-sm font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+            {outMsg && (
+              <p role="status" className="mt-3 text-xs text-[#16A34A] flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5" /> {outMsg}
               </p>
             )}
           </div>
