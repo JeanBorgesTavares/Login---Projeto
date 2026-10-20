@@ -201,6 +201,49 @@ function InternalAgenda() {
   const [ciErr, setCiErr] = useState<string | null>(null)
   const [ciMsg, setCiMsg] = useState<string | null>(null)
 
+  // F1-019 (ajuste do teste humano): espelho de quem está presente no pátio.
+  const [visits, setVisits] = useState<
+    Array<{
+      id: string
+      plate_snapshot: string
+      vehicle_type: string
+      status: string
+      arrived_at: string | null
+      provisional_driver_name: string | null
+      drivers: { full_name: string } | null
+    }>
+  >([])
+  const [vLoading, setVLoading] = useState(true)
+  const [vError, setVError] = useState<string | null>(null)
+
+  const loadVisits = async () => {
+    setVLoading(true)
+    setVError(null)
+    const { data, error: err } = await supabase
+      .from('visits')
+      .select(
+        'id, plate_snapshot, vehicle_type, status, arrived_at, provisional_driver_name, drivers(full_name)',
+      )
+      .eq('status', 'inside')
+      .order('arrived_at', { ascending: false })
+    if (err) {
+      setVError('Não foi possível carregar as visitas presentes.')
+    } else {
+      setVisits(
+        (data ?? []) as Array<{
+          id: string
+          plate_snapshot: string
+          vehicle_type: string
+          status: string
+          arrived_at: string | null
+          provisional_driver_name: string | null
+          drivers: { full_name: string } | null
+        }>,
+      )
+    }
+    setVLoading(false)
+  }
+
   const statusMeta: Record<string, { label: string; cls: string }> = {
     requested: { label: 'Solicitada', cls: 'text-[#EAB308]' },
     confirmed: { label: 'Confirmada', cls: 'text-[#16A34A]' },
@@ -360,6 +403,7 @@ function InternalAgenda() {
         : 'Chegada registrada. Veículo presente no pátio.',
     )
     await load()
+    void loadVisits()
   }
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -393,6 +437,7 @@ function InternalAgenda() {
   useEffect(() => {
     void load()
     void loadDrivers()
+    void loadVisits()
   }, [])
 
   return (
@@ -523,6 +568,50 @@ function InternalAgenda() {
           )}
         </ul>
       )}
+
+      {/* --- F1-019: espelho de quem está presente no pátio agora --- */}
+      <div className="mt-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold text-[#F7F9F8] flex items-center gap-2">
+            <Truck className="w-3.5 h-3.5 text-[#3B82F6]" />
+            Visitas no pátio agora ({visits.length})
+          </p>
+          <button
+            type="button"
+            onClick={loadVisits}
+            className="text-[#8B9A97] hover:text-[#F7F9F8] transition-colors"
+            aria-label="Recarregar visitas"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${vLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+        {vError ? (
+          <p role="alert" className="text-xs text-[#DC2626]">
+            {vError}
+          </p>
+        ) : visits.length === 0 ? (
+          <p className="text-xs text-[#8B9A97]">Nenhum veículo presente no pátio.</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {visits.map((v) => (
+              <li key={v.id} className="flex items-center justify-between gap-2 text-xs">
+                <span className="font-mono text-[#F7F9F8]">{v.plate_snapshot}</span>
+                <span className="text-[#8B9A97] truncate">
+                  {v.drivers?.full_name ?? v.provisional_driver_name ?? '—'} ·{' '}
+                  {v.vehicle_type === 'truck'
+                    ? 'Caminhão'
+                    : v.vehicle_type === 'car'
+                      ? 'Carro'
+                      : 'Moto'}
+                  {v.arrived_at
+                    ? ` · ${new Date(v.arrived_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`
+                    : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <form onSubmit={handleCreate} className="mt-4 space-y-3">
         <div>
