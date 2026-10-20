@@ -121,6 +121,18 @@
     padding: 0 !important;
     margin: 0 !important;
   }
+
+  /* Dropdowns nativos legíveis em tema escuro: o popup do <select> no
+     Windows/Chrome usa fundo claro do SO e herdava texto branco. */
+  select,
+  select option {
+    color: #0a0a0a;
+    background-color: #f7f9f8;
+  }
+  select {
+    color: #f7f9f8;
+    background-color: transparent;
+  }
 }
 
 @layer utilities {
