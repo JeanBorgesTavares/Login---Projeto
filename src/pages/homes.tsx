@@ -257,11 +257,8 @@ function InternalAgenda() {
       setOutErr(err.message)
       return
     }
-    setOutMsg(
-      outException
-        ? 'Saída registrada com exceção — motivo e responsável gravados.'
-        : 'Saída registrada.',
-    )
+    // Sucesso fecha o modal — a visita saindo da lista é a confirmação.
+    setOutVisit(null)
     await loadVisits()
   }
 
@@ -280,7 +277,8 @@ function InternalAgenda() {
       setLkErr(err.message)
       return
     }
-    setLkMsg('Motorista vinculado à visita. Histórico preservado.')
+    // Sucesso fecha o modal — o espelho recarregado é a confirmação.
+    setLinkVisit(null)
     await loadVisits()
   }
 
@@ -479,12 +477,8 @@ function InternalAgenda() {
       setCiErr(err.message)
       return
     }
-    const r = data as { visit_id?: string; idempotent?: boolean }
-    setCiMsg(
-      r?.idempotent
-        ? 'Esta chegada já estava registrada — nada foi duplicado.'
-        : 'Chegada registrada. Veículo presente no pátio.',
-    )
+    // Sucesso fecha o modal — o espelho recarregado é a confirmação.
+    setCheckinRow(null)
     await load()
     void loadVisits()
   }
