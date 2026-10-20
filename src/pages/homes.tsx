@@ -190,6 +190,17 @@ function InternalAgenda() {
   const [cMsg, setCMsg] = useState<string | null>(null)
   const [cErr, setCErr] = useState<string | null>(null)
 
+  // F1-019: registrar chegada (check-in) — previsto ou espontâneo (walk-in).
+  const [checkinRow, setCheckinRow] = useState<AgendaRow | null>(null)
+  const [ciPlate, setCiPlate] = useState('')
+  const [ciType, setCiType] = useState<'truck' | 'car' | 'motorcycle'>('truck')
+  const [ciName, setCiName] = useState('')
+  const [ciContact, setCiContact] = useState('')
+  const [ciTicket, setCiTicket] = useState('')
+  const [ciBusy, setCiBusy] = useState(false)
+  const [ciErr, setCiErr] = useState<string | null>(null)
+  const [ciMsg, setCiMsg] = useState<string | null>(null)
+
   const statusMeta: Record<string, { label: string; cls: string }> = {
     requested: { label: 'Solicitada', cls: 'text-[#EAB308]' },
     confirmed: { label: 'Confirmada', cls: 'text-[#16A34A]' },
@@ -287,6 +298,67 @@ function InternalAgenda() {
     }
     setRejecting(null)
     setRejectReason('')
+    await load()
+  }
+
+  const openCheckin = (r: AgendaRow) => {
+    setCheckinRow(r)
+    setCiPlate(r.vehicles?.plate_normalized ?? '')
+    setCiType('truck')
+    setCiName('')
+    setCiContact('')
+    setCiTicket('')
+    setCiErr(null)
+    setCiMsg(null)
+  }
+
+  const openWalkin = () => {
+    setCheckinRow({
+      id: '',
+      kind: '',
+      status: '',
+      starts_at: '',
+      ends_at: '',
+      source: '',
+      version: 0,
+      drivers: null,
+      vehicles: null,
+    })
+    setCiPlate('')
+    setCiType('truck')
+    setCiName('')
+    setCiContact('')
+    setCiTicket('')
+    setCiErr(null)
+    setCiMsg(null)
+  }
+
+  const handleCheckin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setCiBusy(true)
+    setCiErr(null)
+    setCiMsg(null)
+    const key = checkinRow?.id ? `req:${checkinRow.id}` : `walkin:${ciPlate}:${Date.now()}`
+    const { data, error: err } = await supabase.rpc('check_in_visit', {
+      p_arrival_request_id: checkinRow?.id || null,
+      p_plate: ciPlate || null,
+      p_vehicle_type: ciType,
+      p_provisional_name: ciName || null,
+      p_provisional_contact: ciContact || null,
+      p_ticket: ciTicket || null,
+      p_idempotency_key: key,
+    })
+    setCiBusy(false)
+    if (err) {
+      setCiErr(err.message)
+      return
+    }
+    const r = data as { visit_id?: string; idempotent?: boolean }
+    setCiMsg(
+      r?.idempotent
+        ? 'Esta chegada já estava registrada — nada foi duplicado.'
+        : 'Chegada registrada. Veículo presente no pátio.',
+    )
     await load()
   }
 
@@ -414,18 +486,32 @@ function InternalAgenda() {
                       </button>
                     )}
                     {r.status === 'confirmed' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRejecting(r)
-                          setRejectReason('')
-                          setRejectError(null)
-                        }}
-                        disabled={busy === r.id}
-                        className="h-8 px-2.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-[#8B9A97] text-[11px] font-semibold transition-all disabled:opacity-50"
-                      >
-                        Reabrir
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => openCheckin(r)}
+                          disabled={busy === r.id}
+                          className="h-8 px-2.5 rounded-lg bg-[#3B82F6]/10 hover:bg-[#3B82F6]/20 border border-[#3B82F6]/30 text-[#3B82F6] text-[11px] font-semibold transition-all disabled:opacity-50"
+                        >
+                          {busy === r.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            'Registrar chegada'
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRejecting(r)
+                            setRejectReason('')
+                            setRejectError(null)
+                          }}
+                          disabled={busy === r.id}
+                          className="h-8 px-2.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-[#8B9A97] text-[11px] font-semibold transition-all disabled:opacity-50"
+                        >
+                          Reabrir
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -571,6 +657,160 @@ function InternalAgenda() {
         Previsão não é garantia de vaga. Recusa exige motivo e tudo fica auditado (quem decidiu,
         quando e por quê). No-show só após o fim da janela.
       </p>
+
+      {/* --- F1-019: botão de chegada espontânea + modal de check-in --- */}
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={openWalkin}
+          className="h-10 px-4 rounded-xl bg-[#3B82F6]/10 hover:bg-[#3B82F6]/20 border border-[#3B82F6]/30 text-[#3B82F6] text-sm font-semibold transition-all"
+        >
+          Registrar chegada espontânea
+        </button>
+      </div>
+
+      {checkinRow && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Registrar chegada"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+        >
+          <div className="w-full max-w-[440px] rounded-2xl border border-white/[0.08] bg-[#0A0A0A] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-card-fade-in">
+            <div className="flex items-start justify-between gap-2 mb-4">
+              <h3 className="text-base font-bold text-[#F7F9F8]">
+                {checkinRow.id ? 'Registrar chegada (previsto)' : 'Registrar chegada espontânea'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setCheckinRow(null)}
+                aria-label="Fechar"
+                className="text-[#8B9A97] hover:text-[#F7F9F8]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-[#8B9A97] mb-4">
+              {checkinRow.id
+                ? 'Confirme a placa do veículo que chegou. A previsão vira "Chegou" e o veículo fica presente no pátio.'
+                : 'Veículo sem previsão. Placa e tipo são obrigatórios; nome/contato ficam provisórios até a reconciliação.'}
+            </p>
+            <form onSubmit={handleCheckin} className="space-y-3">
+              <div>
+                <label
+                  htmlFor="ci-plate"
+                  className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+                >
+                  Placa <span className="text-[#DC2626]">*</span>
+                </label>
+                <input
+                  id="ci-plate"
+                  value={ciPlate}
+                  onChange={(e) => setCiPlate(e.target.value)}
+                  placeholder="ABC1D23"
+                  required
+                  disabled={!!checkinRow.id}
+                  className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/40 disabled:opacity-50"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="ci-type"
+                  className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+                >
+                  Tipo
+                </label>
+                <select
+                  id="ci-type"
+                  value={ciType}
+                  onChange={(e) => setCiType(e.target.value as 'truck' | 'car' | 'motorcycle')}
+                  className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/40"
+                >
+                  <option value="truck">Caminhão</option>
+                  <option value="car">Carro</option>
+                  <option value="motorcycle">Moto</option>
+                </select>
+              </div>
+              {!checkinRow.id && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label
+                      htmlFor="ci-name"
+                      className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+                    >
+                      Nome (provisório)
+                    </label>
+                    <input
+                      id="ci-name"
+                      value={ciName}
+                      onChange={(e) => setCiName(e.target.value)}
+                      placeholder="Nome informado"
+                      className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/40"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="ci-contact"
+                      className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+                    >
+                      Contato (provisório)
+                    </label>
+                    <input
+                      id="ci-contact"
+                      value={ciContact}
+                      onChange={(e) => setCiContact(e.target.value)}
+                      placeholder="Telefone/WhatsApp"
+                      className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/40"
+                    />
+                  </div>
+                </div>
+              )}
+              <div>
+                <label
+                  htmlFor="ci-ticket"
+                  className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+                >
+                  Ticket de referência
+                </label>
+                <input
+                  id="ci-ticket"
+                  value={ciTicket}
+                  onChange={(e) => setCiTicket(e.target.value)}
+                  placeholder="Opcional"
+                  className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/40"
+                />
+              </div>
+              {ciErr && (
+                <p role="alert" className="text-xs text-[#DC2626] flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {ciErr}
+                </p>
+              )}
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={ciBusy}
+                  className="flex-1 h-11 rounded-xl bg-[#3B82F6]/10 hover:bg-[#3B82F6]/20 border border-[#3B82F6]/30 text-[#3B82F6] font-semibold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {ciBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Registrar chegada
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCheckinRow(null)}
+                  className="h-11 px-4 rounded-xl border border-white/[0.08] text-[#8B9A97] hover:text-[#F7F9F8] text-sm font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+            {ciMsg && (
+              <p role="status" className="mt-3 text-xs text-[#16A34A] flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5" /> {ciMsg}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* --- Modal de recusa com motivo obrigatório --- */}
       {rejecting && (
