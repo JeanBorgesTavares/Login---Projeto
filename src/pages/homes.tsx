@@ -677,47 +677,48 @@ function InternalAgenda() {
         ) : (
           <ul className="space-y-1.5">
             {visits.map((v) => (
-              <li key={v.id} className="flex items-center justify-between gap-2 text-xs">
-                <div className="min-w-0">
-                  <span className="font-mono text-[#F7F9F8]">{v.plate_snapshot}</span>
-                  <span className="text-[#8B9A97] truncate">
-                    {' '}
-                    · {v.drivers?.full_name ?? v.provisional_driver_name ?? '—'} ·{' '}
-                    {v.vehicle_type === 'truck'
-                      ? 'Caminhão'
-                      : v.vehicle_type === 'car'
-                        ? 'Carro'
-                        : 'Moto'}
-                    {v.arrived_at
-                      ? ` · ${new Date(v.arrived_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`
-                      : ''}
-                  </span>
+              <li key={v.id} className="p-2 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs text-[#F7F9F8]">{v.plate_snapshot}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openCheckout(v)}
+                      className="h-7 px-2 rounded-lg bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] text-[11px] font-semibold transition-all"
+                    >
+                      Registrar saída
+                    </button>
+                    {!v.drivers && (
+                      <button
+                        type="button"
+                        onClick={() => openLink(v)}
+                        className="h-7 px-2 rounded-lg bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 border border-[#8B5CF6]/30 text-[#8B5CF6] text-[11px] font-semibold transition-all"
+                      >
+                        Vincular motorista
+                      </button>
+                    )}
+                    {v.drivers && (
+                      <button
+                        type="button"
+                        onClick={() => openLink(v)}
+                        className="h-7 px-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-[#8B9A97] text-[11px] font-semibold transition-all"
+                      >
+                        Corrigir vínculo
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => openCheckout(v)}
-                  className="shrink-0 h-7 px-2 rounded-lg bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] text-[11px] font-semibold transition-all"
-                >
-                  Registrar saída
-                </button>
-                {!v.drivers && (
-                  <button
-                    type="button"
-                    onClick={() => openLink(v)}
-                    className="shrink-0 h-7 px-2 rounded-lg bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 border border-[#8B5CF6]/30 text-[#8B5CF6] text-[11px] font-semibold transition-all"
-                  >
-                    Vincular motorista
-                  </button>
-                )}
-                {v.drivers && (
-                  <button
-                    type="button"
-                    onClick={() => openLink(v)}
-                    className="shrink-0 h-7 px-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-[#8B9A97] text-[11px] font-semibold transition-all"
-                  >
-                    Corrigir vínculo
-                  </button>
-                )}
+                <p className="text-[11px] text-[#8B9A97] mt-1 truncate">
+                  {v.drivers?.full_name ?? v.provisional_driver_name ?? '—'} ·{' '}
+                  {v.vehicle_type === 'truck'
+                    ? 'Caminhão'
+                    : v.vehicle_type === 'car'
+                      ? 'Carro'
+                      : 'Moto'}
+                  {v.arrived_at
+                    ? ` · ${new Date(v.arrived_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`
+                    : ''}
+                </p>
               </li>
             ))}
           </ul>
