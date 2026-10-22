@@ -2488,7 +2488,6 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
   const [reqDate, setReqDate] = useState('')
   const [reqStart, setReqStart] = useState('')
   const [reqEnd, setReqEnd] = useState('')
-  const [reqNotes, setReqNotes] = useState('')
   const [reqBusy, setReqBusy] = useState(false)
   const [reqMsg, setReqMsg] = useState<string | null>(null)
   const [reqErr, setReqErr] = useState<string | null>(null)
@@ -2519,7 +2518,6 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
       p_kind: reqKind,
       p_starts_at: startsIso,
       p_ends_at: endsIso,
-      p_notes: reqNotes || null,
     })
     setReqBusy(false)
     if (error) {
