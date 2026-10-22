@@ -186,6 +186,7 @@ function InternalAgenda() {
   const [cDate, setCDate] = useState('')
   const [cStart, setCStart] = useState('')
   const [cEnd, setCEnd] = useState('')
+  const [cNotes, setCNotes] = useState('')
   const [cBusy, setCBusy] = useState(false)
   const [cMsg, setCMsg] = useState<string | null>(null)
   const [cErr, setCErr] = useState<string | null>(null)
@@ -495,6 +496,7 @@ function InternalAgenda() {
       p_kind: cKind,
       p_starts_at: startsIso,
       p_ends_at: endsIso,
+      p_notes: cNotes || null,
       p_driver_user_id: cDriver,
     })
     setCBusy(false)
@@ -506,6 +508,7 @@ function InternalAgenda() {
     setCStart('')
     setCEnd('')
     setCDriver('')
+    setCNotes('')
     setCVehicles([])
     setCMsg('Previsão criada em nome do motorista. Ela nasce solicitada — não é garantia de vaga.')
     await load()
@@ -845,14 +848,26 @@ function InternalAgenda() {
               Fim <span className="text-[#DC2626]">*</span>
             </label>
             <input
-              id="agenda-end"
+              id="fleet-end"
               type="time"
-              value={cEnd}
-              onChange={(e) => setCEnd(e.target.value)}
+              value={fEnd}
+              onChange={(e) => setFEnd(e.target.value)}
               required
-              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#16A34A]/40"
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
             />
           </div>
+        </div>
+        <div>
+          <label htmlFor="fleet-notes" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+            Observação (opcional)
+          </label>
+          <input
+            id="fleet-notes"
+            value={fNotes}
+            onChange={(e) => setFNotes(e.target.value)}
+            placeholder="Ex.: carga de soja, doca 2"
+            className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
+          />
         </div>
         <button
           type="submit"
@@ -2103,6 +2118,7 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
   const [fDate, setFDate] = useState('')
   const [fStart, setFStart] = useState('')
   const [fEnd, setFEnd] = useState('')
+  const [fNotes, setFNotes] = useState('')
   const [fBusy, setFBusy] = useState(false)
   const [fMsg, setFMsg] = useState<string | null>(null)
   const [fErr, setFErr] = useState<string | null>(null)
@@ -2173,6 +2189,7 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
       p_kind: fKind,
       p_starts_at: startsIso,
       p_ends_at: endsIso,
+      p_notes: fNotes || null,
       p_driver_user_id: fDriver,
     })
     setFBusy(false)
@@ -2184,6 +2201,7 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
     setFStart('')
     setFEnd('')
     setFDriver('')
+    setFNotes('')
     setFVehicles([])
     setFMsg('Previsão solicitada para o motorista vinculado. Aguarde a confirmação da equipe.')
     await loadFleet()
@@ -2381,6 +2399,21 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
                 className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
               />
             </div>
+          </div>
+          <div>
+            <label
+              htmlFor="fleet-notes"
+              className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+            >
+              Observação (opcional)
+            </label>
+            <input
+              id="fleet-notes"
+              value={fNotes}
+              onChange={(e) => setFNotes(e.target.value)}
+              placeholder="Ex.: nota do pedido, produto, referência"
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
+            />
           </div>
           <button
             type="submit"
@@ -2840,14 +2873,29 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
                 Fim <span className="text-[#DC2626]">*</span>
               </label>
               <input
-                id="req-end"
+                id="agenda-end"
                 type="time"
-                value={reqEnd}
-                onChange={(e) => setReqEnd(e.target.value)}
+                value={cEnd}
+                onChange={(e) => setCEnd(e.target.value)}
                 required
-                className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#EAB308]/40"
+                className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#16A34A]/40"
               />
             </div>
+          </div>
+          <div>
+            <label
+              htmlFor="agenda-notes"
+              className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+            >
+              Observação (opcional)
+            </label>
+            <input
+              id="agenda-notes"
+              value={cNotes}
+              onChange={(e) => setCNotes(e.target.value)}
+              placeholder="Ex.: nota do pedido, produto, referência"
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#16A34A]/40"
+            />
           </div>
           <button
             type="submit"
