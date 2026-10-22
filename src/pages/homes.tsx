@@ -2488,6 +2488,7 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
   const [reqDate, setReqDate] = useState('')
   const [reqStart, setReqStart] = useState('')
   const [reqEnd, setReqEnd] = useState('')
+  const [reqNotes, setReqNotes] = useState('')
   const [reqBusy, setReqBusy] = useState(false)
   const [reqMsg, setReqMsg] = useState<string | null>(null)
   const [reqErr, setReqErr] = useState<string | null>(null)
@@ -2518,6 +2519,7 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
       p_kind: reqKind,
       p_starts_at: startsIso,
       p_ends_at: endsIso,
+      p_notes: reqNotes || null,
     })
     setReqBusy(false)
     if (error) {
@@ -2873,12 +2875,27 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
                 Fim <span className="text-[#DC2626]">*</span>
               </label>
               <input
-                id="agenda-end"
+                id="req-end"
                 type="time"
-                value={cEnd}
-                onChange={(e) => setCEnd(e.target.value)}
+                value={reqEnd}
+                onChange={(e) => setReqEnd(e.target.value)}
                 required
-                className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#16A34A]/40"
+                className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#EAB308]/40"
+              />
+            </div>
+            <div className="col-span-3">
+              <label
+                htmlFor="req-notes"
+                className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+              >
+                Observação (opcional)
+              </label>
+              <input
+                id="req-notes"
+                value={reqNotes}
+                onChange={(e) => setReqNotes(e.target.value)}
+                placeholder="Ex.: carga de soja, doca 2"
+                className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#EAB308]/40"
               />
             </div>
           </div>
