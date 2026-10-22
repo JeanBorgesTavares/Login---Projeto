@@ -2123,6 +2123,12 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
   const [fMsg, setFMsg] = useState<string | null>(null)
   const [fErr, setFErr] = useState<string | null>(null)
 
+  // F1-024 (piloto): vínculos pendentes — motorista pediu por CNPJ; empresa confirma.
+  type PendingLink = { link_id: string; driver_name: string }
+  const [pendingLinks, setPendingLinks] = useState<PendingLink[]>([])
+  const [plBusy, setPlBusy] = useState<string | null>(null)
+  const [plErr, setPlErr] = useState<string | null>(null)
+
   const loadFleet = async () => {
     setFleetLoading(true)
     const [reqRes, drvRes] = await Promise.all([
@@ -2173,8 +2179,32 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
     setFVehicles(rows)
   }
 
+  const loadPendingLinks = async () => {
+    const { data, error } = await supabase.rpc('company_pending_driver_links')
+    if (!error) {
+      setPendingLinks((data ?? []) as PendingLink[])
+    }
+  }
+
+  const handleConfirmLink = async (linkId: string, decision: 'approve' | 'refuse') => {
+    setPlBusy(linkId)
+    setPlErr(null)
+    const { error } = await supabase.rpc('company_confirm_driver_link', {
+      p_link_id: linkId,
+      p_decision: decision,
+      p_reason: decision === 'refuse' ? 'recusado pela empresa' : null,
+    })
+    setPlBusy(null)
+    if (error) {
+      setPlErr(error.message)
+      return
+    }
+    await Promise.all([loadPendingLinks(), loadFleet()])
+  }
+
   useEffect(() => {
     loadFleet()
+    loadPendingLinks()
   }, [])
 
   const handleFleetCreate = async (e: React.FormEvent) => {
@@ -2228,6 +2258,68 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
       accent="purple"
       onLogout={onLogout}
     >
+      {/* --- F1-024: Motoristas aguardando confirmação --- */}
+      <section aria-labelledby="pending-links-heading" className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Link2 className="w-4 h-4 text-[#8B5CF6]" />
+            <h2 id="pending-links-heading" className="text-sm font-semibold text-[#F7F9F8]">
+              Motoristas aguardando confirmação
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={loadPendingLinks}
+            className="text-[#8B9A97] hover:text-[#F7F9F8] transition-colors"
+            aria-label="Recarregar vínculos pendentes"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+
+        {pendingLinks.length === 0 ? (
+          <p className="text-xs text-[#8B9A97] py-2 text-center">
+            Nenhum motorista aguardando confirmação.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {pendingLinks.map((pl) => (
+              <li
+                key={pl.link_id}
+                className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-[#F7F9F8] truncate">{pl.driver_name}</p>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => void handleConfirmLink(pl.link_id, 'approve')}
+                      disabled={plBusy === pl.link_id}
+                      className="h-9 px-3 rounded-lg bg-[#16A34A]/10 hover:bg-[#16A34A]/20 border border-[#16A34A]/30 text-[#16A34A] font-semibold text-xs transition-all disabled:opacity-50"
+                    >
+                      {plBusy === pl.link_id ? '...' : 'Confirmar frota'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleConfirmLink(pl.link_id, 'refuse')}
+                      disabled={plBusy === pl.link_id}
+                      className="h-9 px-3 rounded-lg bg-[#DC2626]/10 hover:bg-[#DC2626]/20 border border-[#DC2626]/30 text-[#DC2626] font-semibold text-xs transition-all disabled:opacity-50"
+                    >
+                      Recusar
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {plErr && (
+          <p role="alert" className="mt-3 text-xs text-[#DC2626] flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5" /> {plErr}
+          </p>
+        )}
+      </section>
+
       {/* --- F1-014: Previsões da frota --- */}
       <section aria-labelledby="fleet-heading" className="mb-6">
         <div className="flex items-center justify-between mb-3">
@@ -2470,6 +2562,14 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
   const [addMsg, setAddMsg] = useState<string | null>(null)
   const [addErr, setAddErr] = useState<string | null>(null)
 
+  // F1-024 (piloto): vínculo com empresa via CNPJ — nasce pendente, a empresa confirma.
+  type LinkedCompany = { link_id: string; company_name: string; status: string }
+  const [myCompanies, setMyCompanies] = useState<LinkedCompany[]>([])
+  const [cnpj, setCnpj] = useState('')
+  const [clBusy, setClBusy] = useState(false)
+  const [clMsg, setClMsg] = useState<string | null>(null)
+  const [clErr, setClErr] = useState<string | null>(null)
+
   // F1-013: Minhas previsões — autosserviço do motorista (S301/S307).
   type MyRequest = {
     id: string
@@ -2579,9 +2679,38 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
     setVehiclesLoading(false)
   }
 
+  const loadMyCompanies = async () => {
+    const { data, error } = await supabase.rpc('driver_linked_companies')
+    if (!error) {
+      setMyCompanies((data ?? []) as LinkedCompany[])
+    }
+  }
+
+  const handleCompanyLink = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setClBusy(true)
+    setClMsg(null)
+    setClErr(null)
+    const { data, error } = await supabase.rpc('request_company_link', { p_cnpj: cnpj })
+    setClBusy(false)
+    if (error) {
+      setClErr(error.message)
+      return
+    }
+    const resumed = ((data ?? {}) as { resumed?: boolean }).resumed
+    setCnpj('')
+    setClMsg(
+      resumed
+        ? 'Solicitação já existia — aguardando a confirmação da empresa.'
+        : 'Solicitação enviada. A empresa vai confirmar seu vínculo à frota.',
+    )
+    await loadMyCompanies()
+  }
+
   useEffect(() => {
     loadMyVehicles()
     loadMyRequests()
+    loadMyCompanies()
   }, [])
 
   const handleAddVehicle = async (e: React.FormEvent) => {
@@ -2628,6 +2757,84 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
       accent="amber"
       onLogout={onLogout}
     >
+      {/* --- F1-024: Minha empresa (vínculo via CNPJ) --- */}
+      <section aria-labelledby="my-company-heading" className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-[#EAB308]" />
+            <h2 id="my-company-heading" className="text-sm font-semibold text-[#F7F9F8]">
+              Minha empresa
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={loadMyCompanies}
+            className="text-[#8B9A97] hover:text-[#F7F9F8] transition-colors"
+            aria-label="Recarregar empresas"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+
+        {myCompanies.length === 0 ? (
+          <p className="text-xs text-[#8B9A97] py-2 text-center">
+            Nenhum vínculo com empresa ainda.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {myCompanies.map((mc) => (
+              <li
+                key={mc.link_id}
+                className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between gap-3"
+              >
+                <p className="text-sm text-[#F7F9F8] truncate">{mc.company_name}</p>
+                <span
+                  className={`text-[11px] font-semibold shrink-0 ${
+                    mc.status === 'active' ? 'text-[#16A34A]' : 'text-[#EAB308]'
+                  }`}
+                >
+                  {mc.status === 'active' ? 'Frota ativa' : 'Aguardando confirmação'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <form onSubmit={handleCompanyLink} className="mt-4 space-y-3">
+          <div>
+            <label htmlFor="cl-cnpj" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
+              CNPJ da sua empresa <span className="text-[#DC2626]">*</span>
+            </label>
+            <input
+              id="cl-cnpj"
+              value={cnpj}
+              onChange={(e) => setCnpj(e.target.value)}
+              placeholder="00.000.000/0000-00"
+              required
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#EAB308]/40"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={clBusy}
+            className="w-full h-11 rounded-xl bg-[#EAB308]/10 hover:bg-[#EAB308]/20 border border-[#EAB308]/30 text-[#EAB308] font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {clBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+            {clBusy ? 'Enviando...' : 'Vincular à empresa'}
+          </button>
+        </form>
+        {clMsg && (
+          <p role="status" className="mt-3 text-xs text-[#16A34A] flex items-center gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5" /> {clMsg}
+          </p>
+        )}
+        {clErr && (
+          <p role="alert" className="mt-3 text-xs text-[#DC2626] flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5" /> {clErr}
+          </p>
+        )}
+      </section>
+
       {/* --- F1-010: Meus veículos --- */}
       <section aria-labelledby="my-vehicles-heading" className="mb-6">
         <div className="flex items-center justify-between mb-3">
