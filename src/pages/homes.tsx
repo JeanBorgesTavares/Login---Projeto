@@ -2492,26 +2492,12 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
               />
             </div>
           </div>
-          <div>
-            <label
-              htmlFor="fleet-notes"
-              className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
-            >
-              Observação (opcional)
-            </label>
-            <input
-              id="fleet-notes"
-              value={fNotes}
-              onChange={(e) => setFNotes(e.target.value)}
-              placeholder="Ex.: nota do pedido, produto, referência"
-              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
-            />
-          </div>
           <button
             type="submit"
-            disabled={fBusy}
-            className="w-full h-11 rounded-xl bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 border border-[#8B5CF6]/30 text-[#8B5CF6] font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            disabled={reqBusy}
+            className="w-full h-11 rounded-xl bg-[#EAB308]/10 hover:bg-[#EAB308]/20 border border-[#EAB308]/30 text-[#EAB308] font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
+            {' '}
             {fBusy ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
@@ -2591,6 +2577,7 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
   const [reqBusy, setReqBusy] = useState(false)
   const [reqMsg, setReqMsg] = useState<string | null>(null)
   const [reqErr, setReqErr] = useState<string | null>(null)
+  const [reqNotes, setReqNotes] = useState('')
   const [cancelBusy, setCancelBusy] = useState<string | null>(null)
 
   const loadMyRequests = async () => {
@@ -2618,6 +2605,7 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
       p_kind: reqKind,
       p_starts_at: startsIso,
       p_ends_at: endsIso,
+      p_notes: reqNotes || null,
     })
     setReqBusy(false)
     if (error) {
