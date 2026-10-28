@@ -848,26 +848,14 @@ function InternalAgenda() {
               Fim <span className="text-[#DC2626]">*</span>
             </label>
             <input
-              id="fleet-end"
+              id="agenda-end"
               type="time"
-              value={fEnd}
-              onChange={(e) => setFEnd(e.target.value)}
+              value={cEnd}
+              onChange={(e) => setCEnd(e.target.value)}
               required
-              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-3 text-sm text-[#F7F9F8] focus:outline-none focus:ring-2 focus:ring-[#16A34A]/40"
             />
           </div>
-        </div>
-        <div>
-          <label htmlFor="fleet-notes" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
-            Observação (opcional)
-          </label>
-          <input
-            id="fleet-notes"
-            value={fNotes}
-            onChange={(e) => setFNotes(e.target.value)}
-            placeholder="Ex.: carga de soja, doca 2"
-            className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
-          />
         </div>
         <div>
           <label htmlFor="agenda-notes" className="block text-xs font-medium text-[#F7F9F8] mb-1.5">
@@ -2489,9 +2477,24 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
               />
             </div>
           </div>
+          <div>
+            <label
+              htmlFor="fleet-notes"
+              className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+            >
+              Observação (opcional)
+            </label>
+            <input
+              id="fleet-notes"
+              value={fNotes}
+              onChange={(e) => setFNotes(e.target.value)}
+              placeholder="Ex.: carga de soja, doca 2"
+              className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/40"
+            />
+          </div>
           <button
             type="submit"
-            disabled={reqBusy}
+            disabled={fBusy}
             className="w-full h-11 rounded-xl bg-[#EAB308]/10 hover:bg-[#EAB308]/20 border border-[#EAB308]/30 text-[#EAB308] font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {' '}
