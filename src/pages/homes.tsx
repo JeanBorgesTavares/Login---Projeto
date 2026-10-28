@@ -970,21 +970,6 @@ function InternalAgenda() {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label
-                      htmlFor="ci-name"
-                      className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
-                    >
-                      Nome (provisório)
-                    </label>
-                    <input
-                      id="ci-name"
-                      value={ciName}
-                      onChange={(e) => setCiName(e.target.value)}
-                      placeholder="Nome informado"
-                      className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/40"
-                    />
-                  </div>
-                  <div>
-                    <label
                       htmlFor="ci-contact"
                       className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
                     >
