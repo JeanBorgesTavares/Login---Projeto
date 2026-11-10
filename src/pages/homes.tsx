@@ -312,7 +312,7 @@ function InternalAgenda() {
       setVError('Não foi possível carregar as visitas presentes.')
     } else {
       setVisits(
-        (data ?? []) as Array<{
+        (data ?? []) as unknown as Array<{
           id: string
           plate_snapshot: string
           vehicle_type: string
@@ -356,7 +356,7 @@ function InternalAgenda() {
     if (err) {
       setError('Não foi possível carregar a agenda. Tente novamente.')
     } else {
-      setRows((data ?? []) as AgendaRow[])
+      setRows((data ?? []) as unknown as AgendaRow[])
     }
     setLoading(false)
   }
@@ -387,7 +387,9 @@ function InternalAgenda() {
       .eq('driver_id', data.id)
       .is('valid_to', null)
     const list = (
-      (links ?? []) as Array<{ vehicles: { id: string; plate_normalized: string } | null }>
+      (links ?? []) as unknown as Array<{
+        vehicles: { id: string; plate_normalized: string } | null
+      }>
     )
       .filter((l) => l.vehicles)
       .map((l) => ({ id: l.vehicles!.id, plate: l.vehicles!.plate_normalized }))
@@ -396,7 +398,7 @@ function InternalAgenda() {
 
   const handleDecision = async (
     r: AgendaRow,
-    decision: 'confirm' | 'refuse' | 'no_show',
+    decision: 'confirm' | 'refuse' | 'no_show' | 'reopen',
     reason?: string,
   ) => {
     setBusy(r.id)
@@ -967,22 +969,20 @@ function InternalAgenda() {
                 </select>
               </div>
               {!checkinRow.id && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label
-                      htmlFor="ci-contact"
-                      className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
-                    >
-                      Contato (provisório)
-                    </label>
-                    <input
-                      id="ci-contact"
-                      value={ciContact}
-                      onChange={(e) => setCiContact(e.target.value)}
-                      placeholder="Telefone/WhatsApp"
-                      className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/40"
-                    />
-                  </div>
+                <div>
+                  <label
+                    htmlFor="ci-contact"
+                    className="block text-xs font-medium text-[#F7F9F8] mb-1.5"
+                  >
+                    Contato (provisório)
+                  </label>
+                  <input
+                    id="ci-contact"
+                    value={ciContact}
+                    onChange={(e) => setCiContact(e.target.value)}
+                    placeholder="Telefone/WhatsApp"
+                    className="w-full h-11 rounded-xl bg-white/[0.03] border border-white/[0.08] px-4 text-sm text-[#F7F9F8] placeholder:text-[#8B9A97]/60 focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/40"
+                  />
                 </div>
               )}
               <div>
@@ -1392,7 +1392,7 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
       return
     }
     const dRows = (
-      (dRes.data ?? []) as Array<{
+      (dRes.data ?? []) as unknown as Array<{
         id: string
         companies: { name: string } | null
         drivers: { full_name: string } | null
@@ -1405,7 +1405,7 @@ export function AdminHome({ email, onLogout }: { email: string | null; onLogout:
       plate: null,
     }))
     const vRows = (
-      (vRes.data ?? []) as Array<{
+      (vRes.data ?? []) as unknown as Array<{
         id: string
         companies: { name: string } | null
         vehicles: { plate_normalized: string } | null
@@ -2129,10 +2129,10 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
         .eq('status', 'active'),
     ])
     if (!reqRes.error) {
-      setFleetRequests((reqRes.data ?? []) as FleetRequest[])
+      setFleetRequests((reqRes.data ?? []) as unknown as FleetRequest[])
     }
     if (!drvRes.error) {
-      const rows = ((drvRes.data ?? []) as Array<{ drivers: FleetDriver | null }>)
+      const rows = ((drvRes.data ?? []) as unknown as Array<{ drivers: FleetDriver | null }>)
         .filter((r) => r.drivers)
         .map((r) => r.drivers as FleetDriver)
       setFleetDrivers(rows)
@@ -2157,7 +2157,9 @@ export function CompanyHome({ email, onLogout }: { email: string | null; onLogou
       .eq('driver_id', data.id)
       .is('valid_to', null)
     const rows = (
-      (links ?? []) as Array<{ vehicles: { id: string; plate_normalized: string } | null }>
+      (links ?? []) as unknown as Array<{
+        vehicles: { id: string; plate_normalized: string } | null
+      }>
     )
       .filter((l) => l.vehicles)
       .map((l) => ({ id: l.vehicles!.id, plate: l.vehicles!.plate_normalized }))
@@ -2587,7 +2589,7 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
       .select('id, kind, status, starts_at, ends_at, notes, version, vehicles(plate_normalized)')
       .order('starts_at', { ascending: true })
     if (!error) {
-      setMyRequests((data ?? []) as MyRequest[])
+      setMyRequests((data ?? []) as unknown as MyRequest[])
     }
     setReqLoading(false)
   }
@@ -2662,7 +2664,7 @@ export function DriverHome({ email, onLogout }: { email: string | null; onLogout
       .is('valid_to', null)
       .order('valid_from', { ascending: false })
     if (!error) {
-      setMyVehicles((data ?? []) as MyVehicle[])
+      setMyVehicles((data ?? []) as unknown as MyVehicle[])
     }
     setVehiclesLoading(false)
   }
